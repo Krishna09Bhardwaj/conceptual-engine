@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JineeGreenCard — Client 360</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #1a1a2e;
+    --navy-light: #16213e;
+    --accent: #0f3460;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --gray: #9ca3af;
+    --gray-light: #f3f4f6;
+    --white: #ffffff;
+    --text: #111827;
+    --text-muted: #6b7280;
+    --border: #e5e7eb;
+    --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: 260px; min-width: 260px; background: var(--navy); color: #e2e8f0;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+  #sidebar-header { padding: 20px 16px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  #sidebar-header h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.5px; color: #fff; }
+  #sidebar-header p { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 3px; }
+  #sidebar-search { padding: 12px 12px 0; }
+  #sidebar-search input {
+    width: 100%; padding: 7px 10px; border-radius: 6px; border: none;
+    background: rgba(255,255,255,0.08); color: #e2e8f0; font-size: 13px; outline: none;
+  }
+  #sidebar-search input::placeholder { color: rgba(255,255,255,0.3); }
+  #clients-heading { padding: 14px 16px 6px; font-size: 10px; font-weight: 600; letter-spacing: 1px; color: rgba(255,255,255,0.35); text-transform: uppercase; }
+  #client-list { flex: 1; overflow-y: auto; padding: 0 8px; }
+  #client-list::-webkit-scrollbar { width: 4px; }
+  #client-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  .client-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 7px;
+    cursor: pointer; transition: background 0.15s; margin-bottom: 2px;
+  }
+  .client-item:hover { background: rgba(255,255,255,0.07); }
+  .client-item.active { background: rgba(255,255,255,0.13); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-active { background: var(--green); }
+  .dot-atrisk { background: var(--red); }
+  .dot-onhold { background: var(--gray); }
+  .dot-completed { background: #60a5fa; }
+  .client-info { flex: 1; min-width: 0; }
+  .client-item-name { font-size: 13px; font-weight: 500; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .client-item-meta { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 1px; }
+  #add-client-btn {
+    margin: 10px 12px 16px; padding: 10px; background: rgba(255,255,255,0.08);
+    border: 1px dashed rgba(255,255,255,0.2); border-radius: 7px; color: rgba(255,255,255,0.6);
+    font-size: 13px; cursor: pointer; text-align: center; transition: all 0.15s;
+  }
+  #add-client-btn:hover { background: rgba(255,255,255,0.13); color: #fff; }
+
+  /* ── Main ── */
+  #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #main-content { flex: 1; overflow-y: auto; padding: 24px; }
+  #main-content::-webkit-scrollbar { width: 6px; }
+  #main-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Welcome screen */
+  #welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; }
+  #welcome-screen h2 { font-size: 26px; font-weight: 700; color: var(--navy); margin-bottom: 12px; }
+  #welcome-screen p { color: var(--text-muted); font-size: 15px; max-width: 440px; line-height: 1.6; }
+  .welcome-badges { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; justify-content: center; }
+  .welcome-badge { padding: 8px 16px; background: var(--navy); color: #fff; border-radius: 20px; font-size: 12px; font-weight: 500; }
+
+  /* Client dashboard */
+  #client-dashboard { display: none; }
+  .dashboard-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .dashboard-header h2 { font-size: 22px; font-weight: 700; color: var(--navy); }
+  .case-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; background: var(--navy); color: #fff; }
+  .risk-banner { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; color: #991b1b; font-size: 14px; font-weight: 500; }
+  .risk-icon { font-size: 18px; }
+
+  /* Stat cards */
+  .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--white); border-radius: 10px; padding: 16px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .stat-card-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-card-value { font-size: 16px; font-weight: 700; color: var(--navy); }
+  .stat-card-value.deadline-close { color: var(--red); }
+  .stat-card-value.status-atrisk { color: var(--red); }
+  .stat-card-value.status-active { color: var(--green); }
+
+  /* Section card */
+  .section-card { background: var(--white); border-radius: 10px; padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px; }
+  .section-title { font-size: 14px; font-weight: 600; color: var(--navy); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .section-title .icon { font-size: 16px; }
+
+  /* Ask AI */
+  .ai-quick-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .quick-btn { padding: 7px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--gray-light); font-size: 12px; cursor: pointer; color: var(--text); transition: all 0.15s; font-weight: 500; }
+  .quick-btn:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .ai-input-row { display: flex; gap: 10px; }
+  .ai-input-row input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.15s; }
+  .ai-input-row input:focus { border-color: var(--accent); }
+  .ai-input-row button { padding: 10px 20px; background: var(--navy); color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+  .ai-input-row button:hover { background: var(--accent); }
+  .ai-input-row button:disabled { background: var(--gray); cursor: not-allowed; }
+  #ai-answer-box { margin-top: 14px; display: none; }
+  #ai-answer-content { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.7; color: var(--text); white-space: pre-wrap; }
+  #ai-answer-meta { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  .thinking-dots::after { content: ''; animation: dots 1.2s steps(4, end) infinite; }
+  @keyframes dots { 0%, 20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%, 100% { content: '...'; } }
+
+  /* Feed data tabs */
+  .tab-bar { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .tab-btn { flex: 1; padding: 9px; border: none; background: var(--gray-light); font-size: 13px; cursor: pointer; color: var(--text-muted); font-weight: 500; transition: all 0.15s; }
+  .tab-btn.active { background: var(--navy); color: #fff; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .feed-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; font-size: 14px; outline: none; font-family: inherit; resize: vertical; }
+  .feed-input:focus { border-color: var(--accent); }
+  .feed-btn { margin-top: 10px; padding: 9px 18px; background: var(--navy); color: #fff; border: none; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+  .feed-btn:hover { background: var(--accent); }
+  .feed-btn:disabled { background: var(--gray); cursor: not-allowed; }
+  .file-label { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; background: var(--gray-light); border: 1px dashed var(--border); border-radius: 7px; cursor: pointer; font-size: 14px; color: var(--text-muted); transition: all 0.15s; }
+  .file-label:hover { background: #e5e7eb; }
+  #wa-file-input, #doc-file-input { display: none; }
+
+  /* Feed cards */
+  .feed-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .feed-card + .feed-card { margin-top: 16px; }
+  .feed-card-title { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+  .feed-card-subtitle { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+  .feed-card-label { display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .feed-card-label + .feed-card-label { margin-top: 12px; }
+  .feed-inline-msg { font-size: 12px; margin-top: 6px; display: none; }
+  .feed-inline-msg.error { color: var(--red); }
+  .feed-inline-msg.success { color: var(--green); }
+
+  /* Source badges */
+  .source-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+  .badge-whatsapp { background: #d1fae5; color: #065f46; }
+  .badge-fathom { background: #ede9fe; color: #4c1d95; }
+  .badge-document { background: #dbeafe; color: #1e40af; }
+  .badge-email { background: #fef3c7; color: #92400e; }
+  .badge-note, .badge-meeting, .badge-wa_call, .badge-internal { background: #f3f4f6; color: #374151; }
+
+  /* Timeline upgraded */
+  .timeline-entry { border: 1px solid var(--border); border-radius: 8px; background: #fff; padding: 12px 14px; }
+  .timeline-entry + .timeline-entry { margin-top: 10px; }
+  .timeline-entry-header { display: flex; align-items: center; gap: 8px; }
+  .timeline-entry-icon { font-size: 16px; flex-shrink: 0; }
+  .timeline-entry-meta { font-size: 12px; color: var(--text-muted); flex: 1; min-width: 0; }
+  .timeline-entry-preview { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 6px; }
+  .timeline-entry-full { font-size: 13px; color: var(--text); white-space: pre-wrap; margin-top: 8px; display: none; line-height: 1.6; max-height: 260px; overflow-y: auto; border-top: 1px solid var(--border); padding-top: 8px; }
+  .timeline-toggle { font-size: 11px; color: var(--accent); cursor: pointer; padding: 2px 7px; border: 1px solid var(--border); border-radius: 4px; background: none; white-space: nowrap; flex-shrink: 0; transition: background 0.12s; }
+  .timeline-toggle:hover { background: var(--gray-light); }
+
+  /* Document tracker */
+  .docs-tracker { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
+  .docs-tracker-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+  .docs-tracker-title { font-size: 12px; font-weight: 600; color: var(--navy); display: flex; align-items: center; gap: 6px; }
+  .docs-count-badge { background: var(--navy); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; }
+  .docs-empty { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+  .docs-list { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .doc-item { background: #f8fafc; border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; }
+  .doc-item-header { display: flex; align-items: center; gap: 8px; }
+  .doc-item-name { font-size: 13px; font-weight: 600; color: var(--navy); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-item-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .doc-item-meta { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+  .doc-preview-toggle { font-size: 11px; color: var(--accent); cursor: pointer; border: none; background: none; padding: 0; margin-top: 5px; }
+  .doc-preview-toggle:hover { text-decoration: underline; }
+  .doc-preview-text { font-size: 12px; color: var(--text); white-space: pre-wrap; line-height: 1.5; margin-top: 8px; display: none; max-height: 160px; overflow-y: auto; background: #fff; border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; }
+  .doc-item-name-btn { background: none; border: none; padding: 0; font-size: 13px; font-weight: 600; color: var(--navy); cursor: pointer; text-align: left; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-item-name-btn:hover { text-decoration: underline; color: var(--accent); }
+  .doc-delete-btn { background: none; border: none; color: #d1d5db; font-size: 15px; cursor: pointer; padding: 2px 4px; border-radius: 4px; flex-shrink: 0; line-height: 1; transition: color 0.15s; }
+  .doc-delete-btn:hover { color: var(--red); }
+
+  /* Document viewer modal */
+  #doc-viewer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: flex-start; justify-content: center; z-index: 2000; padding: 32px 20px; overflow-y: auto; }
+  #doc-viewer-overlay.open { display: flex; }
+  #doc-viewer-modal { background: #fff; width: 100%; max-width: 780px; border-radius: 10px; box-shadow: 0 25px 80px rgba(0,0,0,0.4); overflow: hidden; min-height: 200px; }
+  #doc-viewer-topbar { background: var(--navy); padding: 14px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; }
+  #doc-viewer-filename { font-size: 14px; font-weight: 600; color: #fff; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #doc-viewer-meta { font-size: 11px; color: rgba(255,255,255,0.5); white-space: nowrap; }
+  #doc-viewer-close { background: rgba(255,255,255,0.12); border: none; color: #fff; font-size: 16px; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  #doc-viewer-close:hover { background: rgba(255,255,255,0.22); }
+  #doc-viewer-body { padding: 36px 48px; font-size: 14px; line-height: 1.85; color: #1a1a1a; white-space: pre-wrap; font-family: 'Georgia', serif; background: #fafafa; min-height: 400px; }
+  .empty-state { text-align: center; padding: 32px; color: var(--text-muted); font-size: 14px; }
+
+  /* Right panel */
+  #right-panel { width: 280px; min-width: 280px; border-left: 1px solid var(--border); background: var(--white); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  #right-panel-header { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); }
+  #right-panel-header h3 { font-size: 15px; font-weight: 600; color: var(--navy); }
+  #actions-list { flex: 1; overflow-y: auto; padding: 12px; }
+  #actions-list::-webkit-scrollbar { width: 4px; }
+  .action-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 10px; border-radius: 7px; margin-bottom: 4px; background: var(--gray-light); transition: background 0.15s; }
+  .action-item.completed-item { opacity: 0.5; }
+  .action-item input[type=checkbox] { margin-top: 2px; flex-shrink: 0; cursor: pointer; accent-color: var(--navy); width: 15px; height: 15px; }
+  .action-text { font-size: 13px; line-height: 1.4; color: var(--text); flex: 1; }
+  .action-text.done { text-decoration: line-through; color: var(--text-muted); }
+  .action-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  #add-action-form { padding: 12px; border-top: 1px solid var(--border); }
+  #new-action-input { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; outline: none; font-family: inherit; margin-bottom: 7px; }
+  #new-action-input:focus { border-color: var(--accent); }
+  #add-action-submit { width: 100%; padding: 9px; background: var(--navy); color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  #add-action-submit:hover { background: var(--accent); }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; color: #fff; box-shadow: var(--shadow-md); transition: all 0.3s; opacity: 0; pointer-events: none; z-index: 9999; }
+  #toast.show { opacity: 1; }
+  #toast.success { background: var(--green); }
+  #toast.error { background: var(--red); }
+  #toast.info { background: var(--accent); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--white); border-radius: 12px; padding: 28px; width: 440px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .modal h3 { font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 20px; }
+  .form-row { margin-bottom: 14px; }
+  .form-row label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .form-row input, .form-row select, .form-row textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; font-size: 14px; outline: none; font-family: inherit; }
+  .form-row input:focus, .form-row select:focus { border-color: var(--accent); }
+  .form-row input[type=checkbox] { width: auto; margin-right: 8px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+  .btn-cancel { padding: 9px 18px; background: var(--gray-light); border: 1px solid var(--border); border-radius: 7px; font-size: 14px; cursor: pointer; color: var(--text); }
+  .btn-confirm { padding: 9px 20px; background: var(--navy); color: #fff; border: none; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-confirm:hover { background: var(--accent); }
+
+  /* Login screen */
+  #login-screen { position: fixed; inset: 0; background: var(--navy); display: flex; align-items: center; justify-content: center; z-index: 9000; }
+  #login-screen.hidden { display: none; }
+  .login-box { background: #fff; border-radius: 16px; padding: 40px; width: 400px; max-width: 95vw; box-shadow: 0 30px 80px rgba(0,0,0,0.4); }
+  .login-logo { font-size: 22px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+  .login-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+  .login-tabs { display: flex; gap: 0; margin-bottom: 24px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .login-tab { flex: 1; padding: 9px; border: none; background: var(--gray-light); font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-muted); transition: all 0.15s; }
+  .login-tab.active { background: var(--navy); color: #fff; }
+  .login-box input { width: 100%; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; outline: none; font-family: inherit; margin-bottom: 12px; }
+  .login-box input:focus { border-color: var(--accent); }
+  .login-btn { width: 100%; padding: 12px; background: var(--navy); color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+  .login-btn:hover { background: var(--accent); }
+  .login-err { color: var(--red); font-size: 13px; margin-top: 10px; text-align: center; min-height: 18px; }
+  .login-hint { margin-top: 20px; padding: 14px; background: var(--gray-light); border-radius: 8px; font-size: 12px; color: var(--text-muted); line-height: 1.7; }
+  .login-hint strong { color: var(--text); }
+
+  /* User bar in sidebar */
+  #user-bar { padding: 10px 14px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; }
+  #user-bar-info { flex: 1; min-width: 0; }
+  #user-bar-name { font-size: 13px; font-weight: 600; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #user-bar-role { font-size: 11px; color: rgba(255,255,255,0.4); text-transform: capitalize; }
+  #logout-btn { padding: 5px 10px; background: rgba(255,255,255,0.08); border: none; border-radius: 5px; color: rgba(255,255,255,0.6); font-size: 11px; cursor: pointer; white-space: nowrap; }
+  #logout-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+  /* Custom styled dropdown */
+  .cselect { position: relative; width: 100%; margin-bottom: 12px; }
+  .cselect-trigger {
+    padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; cursor: pointer; display: flex; justify-content: space-between;
+    align-items: center; background: #fff; color: var(--text); user-select: none;
+    transition: border-color 0.15s;
+  }
+  .cselect-trigger:hover, .cselect-trigger.open { border-color: var(--accent); }
+  .cselect-trigger .cselect-arrow { color: var(--text-muted); font-size: 11px; flex-shrink: 0; margin-left: 8px; transition: transform 0.15s; }
+  .cselect-trigger.open .cselect-arrow { transform: rotate(180deg); }
+  .cselect-trigger .cselect-val { color: var(--text-muted); }
+  .cselect-trigger .cselect-val.selected { color: var(--text); }
+  .cselect-list {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff;
+    border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.14); z-index: 500;
+    display: none; max-height: 260px; overflow-y: auto;
+  }
+  .cselect-list.open { display: block; }
+  .cselect-group-label {
+    padding: 10px 14px 4px; font-size: 10px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .cselect-option {
+    padding: 10px 14px; font-size: 14px; cursor: pointer; transition: background 0.1s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .cselect-option:hover { background: var(--gray-light); }
+  .cselect-option.active { background: var(--navy); color: #fff; font-weight: 500; }
+  .cselect-option .check { font-size: 11px; opacity: 0; }
+  .cselect-option.active .check { opacity: 1; }
+
+  /* Clickable PM stat card for admin */
+  .pm-assign-card { cursor: pointer; position: relative; }
+  .pm-assign-card:hover { border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(15,52,96,0.12); }
+  .pm-assign-hint { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+  .pm-inline-dropdown {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; min-width: 200px;
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.14); z-index: 400; display: none; overflow: hidden;
+  }
+  .pm-inline-dropdown.open { display: block; }
+  .pm-inline-option {
+    padding: 10px 14px; font-size: 13px; cursor: pointer; transition: background 0.1s;
+  }
+  .pm-inline-option:hover { background: var(--gray-light); }
+  .pm-inline-option.current { background: var(--navy); color: #fff; font-weight: 500; }
+
+  /* Import button */
+  #import-client-btn {
+    margin: 0 12px 6px; padding: 9px; background: rgba(99,102,241,0.15);
+    border: 1px dashed rgba(99,102,241,0.4); border-radius: 7px; color: rgba(165,180,252,0.9);
+    font-size: 12px; cursor: pointer; text-align: center; transition: all 0.15s;
+  }
+  #import-client-btn:hover { background: rgba(99,102,241,0.25); color: #c7d2fe; }
+
+  /* Import progress */
+  .import-drop-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s; color: var(--text-muted); }
+  .import-drop-zone:hover, .import-drop-zone.drag-over { border-color: var(--accent); background: #f0f4ff; color: var(--accent); }
+  .import-drop-zone .drop-icon { font-size: 32px; margin-bottom: 10px; }
+  .import-drop-zone .drop-label { font-size: 14px; font-weight: 500; }
+  .import-drop-zone .drop-sub { font-size: 12px; margin-top: 4px; opacity: 0.7; }
+  .import-progress { display: none; }
+  .progress-bar-wrap { height: 6px; background: var(--border); border-radius: 3px; margin: 12px 0; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s; width: 0%; }
+  .import-result-list { max-height: 200px; overflow-y: auto; margin-top: 12px; }
+  .import-result-item { font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-bottom: 3px; background: #f0fdf4; color: #166534; }
+
+  /* Admin badge */
+  .pm-badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; background: rgba(99,102,241,0.2); color: #a5b4fc; margin-left: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ── Login Screen ───────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">JineeGreenCard</div>
+    <div class="login-sub">Client 360 Intelligence Engine</div>
+
+    <div class="login-tabs">
+      <button class="login-tab active" id="tab-signin" onclick="switchLoginTab('signin')">Sign In</button>
+      <button class="login-tab" id="tab-register" onclick="switchLoginTab('register')">New Member</button>
+    </div>
+
+    <!-- Sign In panel -->
+    <div id="panel-signin">
+      <input type="text" id="login-username" placeholder="Username" onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
+      <input type="password" id="login-password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+      <button class="login-btn" onclick="doLogin()">Sign In</button>
+      <div class="login-hint">
+        <strong>Demo accounts:</strong><br>
+        admin / admin123 &nbsp;·&nbsp; tulsi / tulsi123<br>
+        dhruv / dhruv123 &nbsp;·&nbsp; lakshita / lakshita123
+      </div>
+    </div>
+
+    <!-- Register panel -->
+    <div id="panel-register" style="display:none;">
+      <input type="text" id="reg-fullname" placeholder="Full Name (e.g. Anjali Mehta)" maxlength="100">
+      <input type="hidden" id="reg-position" value="">
+      <div class="cselect" id="reg-position-cselect">
+        <div class="cselect-trigger" onclick="toggleCSelect('reg-position-cselect')">
+          <span class="cselect-val" id="reg-position-display">— Select your position —</span>
+          <span class="cselect-arrow">▼</span>
+        </div>
+        <div class="cselect-list" id="reg-position-list">
+          <div class="cselect-group-label">Leadership</div>
+          <div class="cselect-option" onclick="pickPosition('Founder / Mentor')"><span class="check">✓</span> Founder / Mentor</div>
+          <div class="cselect-option" onclick="pickPosition('Mentor')"><span class="check">✓</span> Mentor</div>
+          <div class="cselect-option" onclick="pickPosition('Operations Head')"><span class="check">✓</span> Operations Head</div>
+          <div class="cselect-group-label">Program Management</div>
+          <div class="cselect-option" onclick="pickPosition('Senior Program Manager')"><span class="check">✓</span> Senior Program Manager</div>
+          <div class="cselect-option" onclick="pickPosition('Program Manager')"><span class="check">✓</span> Program Manager</div>
+          <div class="cselect-group-label">Research</div>
+          <div class="cselect-option" onclick="pickPosition('Research Mentor')"><span class="check">✓</span> Research Mentor</div>
+          <div class="cselect-option" onclick="pickPosition('Vendor Management')"><span class="check">✓</span> Vendor Management</div>
+          <div class="cselect-group-label">PR &amp; Outreach</div>
+          <div class="cselect-option" onclick="pickPosition('PR Head')"><span class="check">✓</span> PR Head</div>
+          <div class="cselect-option" onclick="pickPosition('PR and Outreach')"><span class="check">✓</span> PR and Outreach</div>
+          <div class="cselect-group-label">Opportunities</div>
+          <div class="cselect-option" onclick="pickPosition('Opportunities Head')"><span class="check">✓</span> Opportunities Head</div>
+          <div class="cselect-option" onclick="pickPosition('Opportunity Sourcing')"><span class="check">✓</span> Opportunity Sourcing</div>
+          <div class="cselect-group-label">Onboarding</div>
+          <div class="cselect-option" onclick="pickPosition('Onboarding Lead')"><span class="check">✓</span> Onboarding Lead</div>
+          <div class="cselect-option" onclick="pickPosition('Onboarding')"><span class="check">✓</span> Onboarding</div>
+        </div>
+      </div>
+      <input type="password" id="reg-password" placeholder="Password (min 6 characters)" onkeydown="if(event.key==='Enter')document.getElementById('reg-confirm').focus()">
+      <input type="password" id="reg-confirm" placeholder="Confirm Password" onkeydown="if(event.key==='Enter')doRegister()">
+      <button class="login-btn" onclick="doRegister()">Create Account</button>
+    </div>
+
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ── Sidebar ────────────────────────────────────── -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>JineeGreenCard</h1>
+    <p>Client 360 Intelligence Engine</p>
+  </div>
+  <div id="sidebar-search">
+    <input type="text" id="search-input" placeholder="Search clients..." oninput="filterClients()">
+  </div>
+  <div id="clients-heading">Clients</div>
+  <div id="client-list">
+    <div class="empty-state" style="padding:20px;font-size:13px;">Loading...</div>
+  </div>
+  <div id="import-client-btn" onclick="openImportModal()">📂 Upload Client List</div>
+  <div id="add-client-btn" onclick="openAddClientModal()">+ Add Client</div>
+  <div id="user-bar">
+    <div id="user-bar-info">
+      <div id="user-bar-name">—</div>
+      <div id="user-bar-role">—</div>
+    </div>
+    <button id="logout-btn" onclick="doLogout()">Sign out</button>
+  </div>
+</div>
+
+<!-- ── Main ──────────────────────────────────────── -->
+<div id="main">
+  <div id="main-content">
+
+    <!-- Welcome -->
+    <div id="welcome-screen">
+      <h2>Client 360 Intelligence</h2>
+      <p>Select a client from the sidebar to view their complete journey — conversations, call transcripts, documents, and AI-powered insights in one place.</p>
+      <div class="welcome-badges">
+        <span class="welcome-badge">WhatsApp Conversations</span>
+        <span class="welcome-badge">Fathom Transcripts</span>
+        <span class="welcome-badge">AI-Powered Answers</span>
+        <span class="welcome-badge">Action Tracking</span>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="client-dashboard">
+
+      <div class="dashboard-header">
+        <!-- View mode -->
+        <div id="dash-view-mode" style="display:flex;align-items:center;gap:10px;flex:1;">
+          <h2 id="dash-name">Client Name</h2>
+          <span class="case-badge" id="dash-case-badge">O-1A</span>
+          <button onclick="startEditClient()" id="edit-client-btn" title="Edit name & visa type"
+            style="padding:5px 10px;background:none;border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:4px;transition:all 0.15s;"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
+            ✏️ Edit
+          </button>
+        </div>
+        <!-- Edit mode -->
+        <div id="dash-edit-mode" style="display:none;align-items:center;gap:8px;flex:1;flex-wrap:wrap;">
+          <input id="edit-name-input" type="text" maxlength="200"
+            style="padding:7px 12px;border:1px solid var(--accent);border-radius:7px;font-size:16px;font-weight:700;color:var(--navy);outline:none;width:220px;"
+            onkeydown="if(event.key==='Enter')saveEditClient();if(event.key==='Escape')cancelEditClient()">
+          <select id="edit-case-select"
+            style="padding:7px 10px;border:1px solid var(--accent);border-radius:7px;font-size:13px;font-weight:600;background:var(--navy);color:#fff;outline:none;cursor:pointer;">
+            <option value="O-1A">O-1A</option>
+            <option value="O-1B">O-1B</option>
+            <option value="EB-1A">EB-1A</option>
+            <option value="EB-1B">EB-1B</option>
+            <option value="EB-2 NIW">EB-2 NIW</option>
+            <option value="H-1B">H-1B</option>
+            <option value="L-1A">L-1A</option>
+            <option value="TN">TN</option>
+            <option value="Other">Other</option>
+          </select>
+          <button onclick="saveEditClient()"
+            style="padding:7px 14px;background:var(--navy);color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;">Save</button>
+          <button onclick="cancelEditClient()"
+            style="padding:7px 12px;background:none;border:1px solid var(--border);border-radius:7px;font-size:13px;color:var(--text-muted);cursor:pointer;">Cancel</button>
+        </div>
+        <div style="margin-left:auto;">
+          <button onclick="confirmDeleteClient()" style="padding:7px 14px;background:none;border:1px solid #fca5a5;color:#ef4444;border-radius:6px;font-size:13px;cursor:pointer;">Delete Client</button>
+        </div>
+      </div>
+
+      <div id="risk-banner" class="risk-banner" style="display:none;">
+        <span class="risk-icon">⚠️</span>
+        <span>This client is flagged AT RISK — immediate attention required. Check action items.</span>
+      </div>
+
+      <div class="stat-cards">
+        <div class="stat-card"><div class="stat-card-label">Case Type</div><div class="stat-card-value" id="dash-case-type">—</div></div>
+        <div class="stat-card" id="deadline-card" onclick="openDeadlineEdit()" title="Click to change deadline"
+          style="cursor:pointer;transition:border-color 0.15s;"
+          onmouseover="this.style.borderColor='var(--accent)'"
+          onmouseout="if(!document.getElementById('deadline-edit-wrap').style.display||document.getElementById('deadline-edit-wrap').style.display==='none')this.style.borderColor=''">
+          <div class="stat-card-label">Deadline <span style="font-size:9px;color:var(--text-muted);font-weight:400;">✏️</span></div>
+          <div class="stat-card-value" id="dash-deadline">—</div>
+          <div id="deadline-edit-wrap" style="display:none;margin-top:8px;" onclick="event.stopPropagation()">
+            <input type="date" id="deadline-date-input"
+              style="width:100%;padding:5px 8px;border:1px solid var(--accent);border-radius:6px;font-size:13px;outline:none;margin-bottom:6px;">
+            <div style="display:flex;gap:5px;">
+              <button onclick="saveDeadline()" style="flex:1;padding:5px;background:var(--navy);color:#fff;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;">Save</button>
+              <button onclick="cancelDeadlineEdit()" style="flex:1;padding:5px;background:var(--gray-light);border:1px solid var(--border);border-radius:5px;font-size:12px;cursor:pointer;">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card"><div class="stat-card-label">Status</div><div class="stat-card-value" id="dash-status">—</div></div>
+        <div class="stat-card" id="pm-stat-card"><div class="stat-card-label">Assigned PM</div><div class="stat-card-value" id="dash-pm" style="font-size:14px;">—</div><div class="pm-assign-hint" id="pm-assign-hint" style="display:none;">Click to assign</div><div class="pm-inline-dropdown" id="pm-inline-dropdown"></div></div>
+      </div>
+      <div id="dash-last-updated" style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:right;display:none;"></div>
+
+      <!-- Ask AI -->
+      <div class="section-card">
+        <div class="section-title"><span class="icon">🤖</span> Ask Anything About This Client</div>
+        <div class="ai-quick-btns">
+          <button class="quick-btn" onclick="quickAsk('Give me a full status update on this client including what is done, what is pending, and any risks.')">Full Status</button>
+          <button class="quick-btn" onclick="quickAsk('What tasks and documents are currently pending for this client?')">What\'s Pending</button>
+          <button class="quick-btn" onclick="quickAsk('What are the immediate action items for this client?')">Action Items</button>
+          <button class="quick-btn" onclick="quickAsk('What risks or red flags exist for this client? Any deadlines at risk?')">What\'s at Risk</button>
+          <button class="quick-btn" onclick="quickAsk('Summarize all the conversations and calls we have had with this client.')">Conversation Summary</button>
+        </div>
+        <div class="ai-input-row">
+          <input type="text" id="ai-question-input" placeholder="Ask anything about this client..." onkeydown="if(event.key==='Enter') askAI()">
+          <button id="ask-btn" onclick="askAI()">Ask AI</button>
+        </div>
+        <div id="ai-answer-box">
+          <div id="ai-answer-content"></div>
+          <div id="ai-answer-meta"></div>
+        </div>
+      </div>
+
+      <!-- Feed Data -->
+      <div class="section-card">
+        <div class="section-title"><span class="icon">📥</span> Feed Data</div>
+        <p style="font-size:13px;color:var(--text-muted);margin:-4px 0 18px;">Add information about this client. Everything you add is stored and used by the AI.</p>
+
+        <!-- Card 1: WhatsApp Export -->
+        <div class="feed-card">
+          <div class="feed-card-title">WhatsApp Export</div>
+          <div class="feed-card-subtitle">Upload a .txt file exported directly from WhatsApp</div>
+          <label class="file-label" for="wa-file-input">📎 Choose .txt file</label>
+          <input type="file" id="wa-file-input" accept=".txt" onchange="onWaFileSelected()">
+          <div id="wa-filename" style="font-size:12px;color:var(--green);margin:5px 0 0;min-height:16px;"></div>
+          <button class="feed-btn" id="wa-upload-btn" onclick="uploadWaFile()">Upload Export</button>
+        </div>
+
+        <!-- Card 2: WhatsApp Paste -->
+        <div class="feed-card">
+          <div class="feed-card-title">Paste WhatsApp Messages</div>
+          <div class="feed-card-subtitle">Copy messages directly from WhatsApp and paste them here. Add the date so the AI knows when this conversation happened.</div>
+          <label class="feed-card-label" for="wa-paste-date">Conversation Date</label>
+          <input type="date" class="feed-input" id="wa-paste-date">
+          <div id="wa-paste-date-error" class="feed-inline-msg error">Please select the conversation date before saving.</div>
+          <label class="feed-card-label" for="wa-paste-input" style="margin-top:12px;">Paste messages here</label>
+          <textarea class="feed-input" id="wa-paste-input" rows="5" placeholder="Paste the WhatsApp conversation exactly as copied from your phone..."></textarea>
+          <button class="feed-btn" id="wa-paste-btn" onclick="saveWaPaste()">Save Chat</button>
+        </div>
+
+        <!-- Card 3: Fathom Transcript -->
+        <div class="feed-card">
+          <div class="feed-card-title">Fathom Transcript</div>
+          <div class="feed-card-subtitle">Paste the Fathom share link. The system will automatically fetch the full transcript.</div>
+          <input type="text" class="feed-input" id="fathom-url-input" placeholder="https://fathom.video/share/...">
+          <div id="fathom-url-error" class="feed-inline-msg error">Please enter a valid Fathom link starting with https://fathom.video/</div>
+          <div id="fathom-status" class="feed-inline-msg"></div>
+          <button class="feed-btn" id="fathom-btn" onclick="fetchFathom()">Fetch Transcript</button>
+        </div>
+
+        <!-- Card 4: PDF Document Upload -->
+        <div class="feed-card">
+          <div class="feed-card-title">Upload Document</div>
+          <div class="feed-card-subtitle">Upload case documents, RFE responses, expert opinion letters, or any PDF. The system reads and indexes the full content.</div>
+          <label class="file-label" for="doc-file-input">📄 Choose .pdf file</label>
+          <input type="file" id="doc-file-input" accept=".pdf" onchange="onDocFileSelected()">
+          <div id="doc-filename" style="font-size:12px;color:var(--green);margin:5px 0 0;min-height:16px;"></div>
+          <div id="doc-status" class="feed-inline-msg"></div>
+          <button class="feed-btn" id="doc-upload-btn" onclick="uploadDocument()">Upload PDF</button>
+
+          <!-- Docs tracker -->
+          <div class="docs-tracker">
+            <div class="docs-tracker-header" onclick="toggleDocsList()">
+              <div class="docs-tracker-title">
+                📁 Uploaded Documents
+                <span class="docs-count-badge" id="docs-count">0</span>
+              </div>
+              <span id="docs-chevron" style="font-size:11px;color:var(--text-muted);">▼</span>
+            </div>
+            <div id="docs-list-body">
+              <div style="position:relative;margin-top:10px;" id="docs-search-wrap">
+                <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted);pointer-events:none;">🔍</span>
+                <input type="text" id="docs-search-input" placeholder="Search documents..."
+                  oninput="filterDocs()"
+                  style="width:100%;padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:7px;font-size:13px;outline:none;font-family:inherit;background:#fafafa;">
+              </div>
+              <div class="docs-empty" id="docs-empty" style="margin-top:10px;">No documents uploaded yet.</div>
+              <div class="docs-list" id="docs-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 5: Note or Email -->
+        <div class="feed-card">
+          <div class="feed-card-title">Add Note or Email</div>
+          <div class="feed-card-subtitle">Paste an email thread, type a meeting summary, or add any manual update about this client.</div>
+          <label class="feed-card-label" for="note-type-select">Type</label>
+          <select class="feed-input" id="note-type-select" style="background:#fff;cursor:pointer;">
+            <option value="note">General Note</option>
+            <option value="email">Email Thread</option>
+            <option value="meeting">Meeting Summary</option>
+            <option value="wa_call">WhatsApp Call Summary</option>
+            <option value="internal">Internal Update</option>
+          </select>
+          <label class="feed-card-label" for="note-content-input" style="margin-top:12px;">Content</label>
+          <textarea class="feed-input" id="note-content-input" rows="5" placeholder="Type or paste content here..."></textarea>
+          <button class="feed-btn" id="note-save-btn" onclick="saveNote()">Save</button>
+        </div>
+      </div>
+
+      <!-- Data History -->
+      <div class="section-card">
+        <div class="section-title"><span class="icon">📋</span> Data History</div>
+        <div id="data-timeline">
+          <div class="empty-state">No data added yet. Feed some data above to get started.</div>
+        </div>
+      </div>
+
+    </div><!-- /client-dashboard -->
+  </div><!-- /main-content -->
+</div><!-- /main -->
+
+<!-- ── Document Viewer Modal ─────────────────────── -->
+<div id="doc-viewer-overlay" onclick="closeDocViewer(event)">
+  <div id="doc-viewer-modal">
+    <div id="doc-viewer-topbar">
+      <span style="font-size:18px;">📄</span>
+      <span id="doc-viewer-filename">Document</span>
+      <span id="doc-viewer-meta"></span>
+      <button id="doc-viewer-close" onclick="closeDocViewer()">✕</button>
+    </div>
+    <div id="doc-viewer-body"></div>
+  </div>
+</div>
+
+<!-- ── Right Panel ────────────────────────────────── -->
+<div id="right-panel">
+  <div id="right-panel-header">
+    <h3>Action Items</h3>
+  </div>
+  <div id="actions-list">
+    <div class="empty-state" style="margin-top:40px;">Select a client to see action items.</div>
+  </div>
+  <div id="add-action-form" style="display:none;">
+    <input type="text" id="new-action-input" placeholder="Add action item..." onkeydown="if(event.key==='Enter') addActionItem()">
+    <button id="add-action-submit" onclick="addActionItem()">+ Add Action Item</button>
+  </div>
+</div>
+
+<!-- ── Import Clients Modal ──────────────────────── -->
+<div class="modal-overlay" id="import-modal">
+  <div class="modal" style="width:500px;">
+    <h3>Upload Client List</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px;">Upload a PDF, DOCX, or TXT file with your client data. The AI will extract all client records automatically.</p>
+
+    <div class="import-drop-zone" id="import-drop-zone" onclick="document.getElementById('import-file-input').click()" ondragover="onImportDragOver(event)" ondragleave="onImportDragLeave(event)" ondrop="onImportDrop(event)">
+      <div class="drop-icon">📄</div>
+      <div class="drop-label" id="import-drop-label">Click to choose file or drag & drop here</div>
+      <div class="drop-sub">PDF, DOCX, DOC, TXT — max 10MB</div>
+    </div>
+    <input type="file" id="import-file-input" accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="onImportFileSelected()">
+
+    <div class="import-progress" id="import-progress">
+      <div style="font-size:13px;color:var(--text-muted);margin-top:14px;" id="import-status-text">Reading file...</div>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="import-progress-bar"></div></div>
+      <div class="import-result-list" id="import-result-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('import-modal')">Close</button>
+      <button class="btn-confirm" id="import-submit-btn" onclick="submitImport()" disabled>Import Clients</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Client Modal ──────────────────────────── -->
+<div class="modal-overlay" id="add-client-modal">
+  <div class="modal">
+    <h3>Add New Client</h3>
+    <div class="form-row">
+      <label>Full Name *</label>
+      <input type="text" id="nc-name" placeholder="e.g. Arjun Mehta" maxlength="200" onkeydown="if(event.key==='Enter') submitNewClient()">
+    </div>
+    <div class="form-row">
+      <label>Case Type *</label>
+      <select id="nc-case-type">
+        <option value="O-1A">O-1A (Extraordinary Ability)</option>
+        <option value="O-1B">O-1B (Arts/Film/TV)</option>
+        <option value="EB-1A">EB-1A (Green Card)</option>
+        <option value="EB-1B">EB-1B (Outstanding Researcher)</option>
+        <option value="EB-2 NIW">EB-2 NIW (National Interest Waiver)</option>
+        <option value="H-1B">H-1B (Specialty Occupation)</option>
+        <option value="L-1A">L-1A (Intracompany Manager)</option>
+        <option value="TN">TN (Canada/Mexico)</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>Filing Deadline</label>
+      <input type="date" id="nc-deadline">
+    </div>
+    <div class="form-row" id="nc-pm-row">
+      <label>Assigned PM</label>
+      <select id="nc-pm">
+        <option value="">— Select PM —</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>Status</label>
+      <select id="nc-status">
+        <option value="Active">Active</option>
+        <option value="At Risk">At Risk</option>
+        <option value="On Hold">On Hold</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </div>
+    <div class="form-row" style="display:flex;align-items:center;">
+      <input type="checkbox" id="nc-risk" style="width:auto;margin-right:8px;">
+      <label for="nc-risk" style="margin:0;text-transform:none;letter-spacing:0;font-size:14px;font-weight:normal;">Flag as At Risk</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('add-client-modal')">Cancel</button>
+      <button class="btn-confirm" onclick="submitNewClient()">Add Client</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script>
+const API = '';
+let currentClientId = null;
+let allClients = [];
+let currentUser = null;  // { token, role, name, id }
+
+// ─── Auth ───────────────────────────────────────────
+function getToken() { return localStorage.getItem('c360_token'); }
+function saveSession(data) { localStorage.setItem('c360_token', data.token); localStorage.setItem('c360_user', JSON.stringify(data)); }
+function clearSession() { localStorage.removeItem('c360_token'); localStorage.removeItem('c360_user'); }
+
+function authHeaders() {
+  const t = getToken();
+  return t ? { 'Authorization': 'Bearer ' + t } : {};
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-err');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Enter username and password.'; return; }
+  try {
+    const res = await fetch(API + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) { errEl.textContent = 'Invalid username or password.'; return; }
+    const data = await res.json();
+    saveSession(data);
+    currentUser = data;
+    showApp();
+  } catch(e) {
+    errEl.textContent = 'Could not connect to server.';
+  }
+}
+
+function switchLoginTab(tab) {
+  document.getElementById('panel-signin').style.display = tab === 'signin' ? 'block' : 'none';
+  document.getElementById('panel-register').style.display = tab === 'register' ? 'block' : 'none';
+  document.getElementById('tab-signin').classList.toggle('active', tab === 'signin');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  document.getElementById('login-err').textContent = '';
+}
+
+async function doRegister() {
+  const fullName = document.getElementById('reg-fullname').value.trim();
+  const position = document.getElementById('reg-position').value;
+  const password = document.getElementById('reg-password').value;
+  const confirm  = document.getElementById('reg-confirm').value;
+  const errEl = document.getElementById('login-err');
+  errEl.textContent = '';
+
+  if (!fullName) { errEl.textContent = 'Full name is required.'; return; }
+  if (!position) { errEl.textContent = 'Please select your position.'; return; }
+  if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+  if (password !== confirm) { errEl.textContent = 'Passwords do not match.'; return; }
+
+  try {
+    const res = await fetch(API + '/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full_name: fullName, position, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.detail || 'Registration failed.'; return; }
+    const sessionData = { ...data, position };
+    saveSession(sessionData);
+    currentUser = sessionData;
+    showApp();
+  } catch(e) {
+    errEl.textContent = 'Could not connect to server.';
+  }
+}
+
+async function doLogout() {
+  try { await fetch(API + '/api/auth/logout', { method: 'POST', headers: authHeaders() }); } catch(e) {}
+  clearSession();
+  currentUser = null;
+  currentClientId = null;
+
+  // Full reset — restore all panels for next login
+  const mc = document.getElementById('main-content');
+  mc.scrollTop = 0;
+  mc.style.overflow = '';
+
+  const clientDash = document.getElementById('client-dashboard');
+  clientDash.style.display = 'none';
+  clientDash.style.height = '';
+  clientDash.style.overflow = '';
+
+  document.getElementById('right-panel').style.display = 'flex';
+  document.getElementById('add-client-btn').style.display = 'block';
+  document.getElementById('import-client-btn').style.display = 'block';
+  document.getElementById('sidebar-search').style.display = 'block';
+  document.getElementById('clients-heading').style.display = 'block';
+  document.getElementById('client-list').style.display = 'block';
+  document.getElementById('client-list').innerHTML = '<div class="empty-state" style="padding:20px;font-size:13px;">Loading...</div>';
+
+  const ws = document.getElementById('welcome-screen');
+  ws.style.cssText = 'display:flex;';
+  ws.innerHTML = `
+    <h2>Client 360 Intelligence</h2>
+    <p>Select a client from the sidebar to view their complete journey.</p>
+    <div class="welcome-badges">
+      <span class="welcome-badge">WhatsApp Conversations</span>
+      <span class="welcome-badge">Fathom Transcripts</span>
+      <span class="welcome-badge">AI-Powered Answers</span>
+      <span class="welcome-badge">Action Tracking</span>
+    </div>
+  `;
+
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-err').textContent = '';
+  switchLoginTab('signin');
+}
+
+function showApp() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('user-bar-name').textContent = currentUser.name;
+
+  const role = currentUser.role;
+  const position = currentUser.position || '';
+
+  if (role === 'admin') {
+    document.getElementById('user-bar-role').textContent = 'Admin — all clients';
+  } else if (role === 'pm') {
+    document.getElementById('user-bar-role').textContent = position || 'Program Manager';
+  } else {
+    document.getElementById('user-bar-role').textContent = position || 'Team Member';
+  }
+
+  // Admin can set PM on new client; PM cannot
+  const pmRow = document.getElementById('nc-pm-row');
+  if (pmRow) pmRow.style.display = role === 'admin' ? 'block' : 'none';
+
+  if (role === 'admin' || role === 'pm') {
+    // Ensure scroll container is unlocked for PM/admin
+    const mc = document.getElementById('main-content');
+    mc.style.overflow = '';
+    mc.scrollTop = 0;
+    const cd = document.getElementById('client-dashboard');
+    cd.style.height = '';
+    cd.style.overflow = '';
+    loadClients();
+  } else {
+    showStaffPlaceholder();
+  }
+}
+
+function showStaffPlaceholder() {
+  const position = currentUser.position || 'your role';
+
+  // Lock the scroll container so nothing underneath can be scrolled to
+  const mc = document.getElementById('main-content');
+  mc.scrollTop = 0;
+  mc.style.overflow = 'hidden';
+
+  // Bury all PM/admin DOM — display:none + zero height to eliminate scroll space
+  const clientDash = document.getElementById('client-dashboard');
+  clientDash.style.display = 'none';
+  clientDash.style.height = '0';
+  clientDash.style.overflow = 'hidden';
+
+  // Hide sidebar PM elements
+  document.getElementById('right-panel').style.display = 'none';
+  document.getElementById('add-client-btn').style.display = 'none';
+  document.getElementById('import-client-btn').style.display = 'none';
+  document.getElementById('sidebar-search').style.display = 'none';
+  document.getElementById('clients-heading').style.display = 'none';
+  document.getElementById('client-list').style.display = 'none';
+
+  // Replace welcome-screen with full-height staff placeholder
+  const ws = document.getElementById('welcome-screen');
+  ws.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;';
+  ws.innerHTML = `
+    <div style="max-width:440px;padding:40px;">
+      <div style="font-size:56px;margin-bottom:24px;">🚧</div>
+      <h2 style="font-size:24px;font-weight:700;color:var(--navy);margin-bottom:14px;">Dashboard Coming Soon</h2>
+      <p style="color:var(--text-muted);font-size:15px;line-height:1.8;">
+        Hi <strong>${esc(currentUser.name)}</strong> — your <strong>${esc(position)}</strong> workspace is being built.
+        <br><br>Check back soon for your personalized dashboard.
+      </p>
+    </div>
+  `;
+}
+
+// ─── Init ───────────────────────────────────────────
+async function init() {
+  const stored = localStorage.getItem('c360_user');
+  if (stored) {
+    try {
+      const stored_parsed = JSON.parse(stored);
+      const data = stored_parsed;
+      // Verify token still valid
+      const res = await fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + data.token } });
+      if (res.ok) {
+        // Merge stored position into currentUser (me endpoint may not return it)
+        currentUser = { ...data, position: stored_parsed.position || data.position || '' };
+        showApp();
+        return;
+      }
+    } catch(e) {}
+    clearSession();
+  }
+  // Show login screen
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+
+// ─── Client list ────────────────────────────────────
+async function loadClients() {
+  try {
+    const res = await fetch(API + '/api/clients', { headers: authHeaders() });
+    if (res.status === 401) { doLogout(); return; }
+    if (!res.ok) throw new Error('Failed to load');
+    allClients = await res.json();
+    renderClientList(allClients);
+  } catch(e) {
+    document.getElementById('client-list').innerHTML = '<div class="empty-state" style="padding:20px;font-size:13px;color:#ef4444;">Could not connect to server.</div>';
+  }
+}
+
+function renderClientList(clients) {
+  const el = document.getElementById('client-list');
+  if (!clients.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px;font-size:13px;">No clients yet. Add one below.</div>';
+    return;
+  }
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  el.innerHTML = clients.map(c => `
+    <div class="client-item ${currentClientId === c.id ? 'active' : ''}" onclick="selectClient(${c.id})" id="client-item-${c.id}">
+      <div class="status-dot ${dotClass(c.status, c.risk_flag)}"></div>
+      <div class="client-info">
+        <div class="client-item-name">${esc(c.name)}${isAdmin ? `<span class="pm-badge">${esc((c.assigned_pm||'?').split(' ')[0])}</span>` : ''}</div>
+        <div class="client-item-meta">${esc(c.case_type)} · ${esc(c.assigned_pm || 'Unassigned')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function dotClass(status, risk) {
+  if (risk) return 'dot-atrisk';
+  if (status === 'At Risk') return 'dot-atrisk';
+  if (status === 'On Hold') return 'dot-onhold';
+  if (status === 'Completed') return 'dot-completed';
+  return 'dot-active';
+}
+
+function filterClients() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  renderClientList(allClients.filter(c => c.name.toLowerCase().includes(q) || (c.case_type||'').toLowerCase().includes(q)));
+}
+
+// ─── Select Client ──────────────────────────────────
+async function selectClient(id) {
+  currentClientId = id;
+  document.querySelectorAll('.client-item').forEach(el => el.classList.remove('active'));
+  const item = document.getElementById(`client-item-${id}`);
+  if (item) item.classList.add('active');
+
+  try {
+    const res = await fetch(API + `/api/clients/${id}`, { headers: authHeaders() });
+    if (res.status === 401) { doLogout(); return; }
+    if (!res.ok) throw new Error('Not found');
+    const data = await res.json();
+    renderDashboard(data.client, data.data_entries, data.action_items);
+  } catch(e) {
+    showToast('Could not load client', 'error');
+  }
+}
+
+function renderDashboard(client, entries, actions) {
+  document.getElementById('welcome-screen').style.display = 'none';
+  document.getElementById('client-dashboard').style.display = 'block';
+
+  document.getElementById('dash-name').textContent = client.name;
+  document.getElementById('dash-case-badge').textContent = client.case_type;
+  document.getElementById('dash-case-type').textContent = client.case_type;
+  document.getElementById('dash-pm').textContent = client.assigned_pm || 'Unassigned';
+
+  // Deadline
+  const dlEl = document.getElementById('dash-deadline');
+  if (client.deadline) {
+    const days = Math.ceil((new Date(client.deadline) - new Date()) / 86400000);
+    dlEl.textContent = client.deadline + (days <= 30 ? ` (${days}d)` : '');
+    dlEl.className = 'stat-card-value' + (days <= 30 ? ' deadline-close' : '');
+  } else {
+    dlEl.textContent = 'Not set';
+    dlEl.className = 'stat-card-value';
+  }
+
+  // Status
+  const stEl = document.getElementById('dash-status');
+  stEl.textContent = client.status;
+  stEl.className = 'stat-card-value ' + (client.status === 'At Risk' ? 'status-atrisk' : client.status === 'Active' ? 'status-active' : '');
+
+  // Risk banner
+  document.getElementById('risk-banner').style.display = client.risk_flag ? 'flex' : 'none';
+
+  // Last updated
+  const luEl = document.getElementById('dash-last-updated');
+  if (client.last_updated) {
+    luEl.textContent = 'Last updated: ' + formatDate(client.last_updated);
+    luEl.style.display = 'block';
+  } else {
+    luEl.style.display = 'none';
+  }
+
+  // PM assignment card
+  initPmCard();
+
+  // Reset AI
+  document.getElementById('ai-question-input').value = '';
+  document.getElementById('ai-answer-box').style.display = 'none';
+  document.getElementById('ai-answer-content').textContent = '';
+
+  // Timeline + Docs tracker
+  renderTimeline(entries);
+  renderDocsList(entries);
+
+  // Actions
+  renderActions(actions);
+  document.getElementById('add-action-form').style.display = 'block';
+}
+
+// ─── Timeline ───────────────────────────────────────
+const _TL_ICONS = { whatsapp: '💬', fathom: '🎙', email: '📧', note: '📝', document: '📄', meeting: '📋', wa_call: '📞', internal: '🔒' };
+const _TL_LABELS = { whatsapp: 'WhatsApp', fathom: 'Fathom', email: 'Email', note: 'Note', document: 'Document', meeting: 'Meeting', wa_call: 'WA Call', internal: 'Internal' };
+
+function renderTimeline(entries) {
+  const el = document.getElementById('data-timeline');
+  if (!entries || !entries.length) {
+    el.innerHTML = '<div class="empty-state">No data added yet. Feed some data above to get started.</div>';
+    return;
+  }
+  el.innerHTML = entries.map((e, idx) => {
+    const icon = _TL_ICONS[e.source_type] || '📄';
+    const label = _TL_LABELS[e.source_type] || capitalize(e.source_type);
+    const badgeCls = 'source-badge badge-' + e.source_type;
+    const preview = esc(e.content.substring(0, 120)) + (e.content.length > 120 ? '…' : '');
+    const full = esc(e.content);
+    // Extract conversation date if prepended
+    const dateMatch = e.source_type === 'whatsapp' && e.content.match(/^\[Conversation Date: ([^\]]+)\]/);
+    const convDate = dateMatch ? ` · Chat date: ${dateMatch[1]}` : '';
+    const filename = e.source_type === 'document' && e.source_url ? ` · ${esc(e.source_url)}` : '';
+    const uid = `tl-${idx}-${e.id || idx}`;
+    return `
+    <div class="timeline-entry">
+      <div class="timeline-entry-header">
+        <span class="timeline-entry-icon">${icon}</span>
+        <span class="${badgeCls}">${label}</span>
+        <span class="timeline-entry-meta">${formatDate(e.created_at)}${convDate}${filename}</span>
+        ${e.content.length > 120 ? `<button class="timeline-toggle" onclick="toggleEntry('${uid}',this)">View full</button>` : ''}
+      </div>
+      <div class="timeline-entry-preview">${preview}</div>
+      <div class="timeline-entry-full" id="${uid}">${full}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleEntry(uid, btn) {
+  const el = document.getElementById(uid);
+  const open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? 'View full' : 'Collapse';
+}
+
+// ─── Action Items ────────────────────────────────────
+function renderActions(actions) {
+  const el = document.getElementById('actions-list');
+  if (!actions.length) {
+    el.innerHTML = '<div class="empty-state" style="margin-top:20px;">No action items yet.</div>';
+    return;
+  }
+  el.innerHTML = actions.map(a => `
+    <div class="action-item ${a.completed ? 'completed-item' : ''}" id="action-${a.id}">
+      <input type="checkbox" ${a.completed ? 'checked' : ''} onchange="toggleAction(${a.id}, this.checked)">
+      <div>
+        <div class="action-text ${a.completed ? 'done' : ''}">${esc(a.task)}</div>
+        <div class="action-meta">${a.assigned_to ? esc(a.assigned_to) : ''}${a.due_date ? ' · Due ' + a.due_date : ''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function toggleAction(itemId, completed) {
+  try {
+    await fetch(API + `/api/action_items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ completed }),
+    });
+    const item = document.getElementById(`action-${itemId}`);
+    if (item) {
+      item.classList.toggle('completed-item', completed);
+      const txt = item.querySelector('.action-text');
+      if (txt) txt.classList.toggle('done', completed);
+    }
+  } catch(e) {
+    showToast('Failed to update action item', 'error');
+  }
+}
+
+async function addActionItem() {
+  const input = document.getElementById('new-action-input');
+  const task = input.value.trim();
+  if (!task || !currentClientId) return;
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}/action_items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ task }),
+    });
+    if (!res.ok) throw new Error('Failed');
+    input.value = '';
+    showToast('Action item added', 'success');
+    await refreshActions();
+  } catch(e) {
+    showToast('Failed to add action item', 'error');
+  }
+}
+
+async function refreshActions() {
+  if (!currentClientId) return;
+  const res = await fetch(API + `/api/clients/${currentClientId}`, { headers: authHeaders() });
+  const data = await res.json();
+  renderActions(data.action_items);
+}
+
+// ─── AI ─────────────────────────────────────────────
+function quickAsk(question) {
+  document.getElementById('ai-question-input').value = question;
+  askAI();
+}
+
+async function askAI() {
+  const q = document.getElementById('ai-question-input').value.trim();
+  if (!q || !currentClientId) return;
+
+  const btn = document.getElementById('ask-btn');
+  const box = document.getElementById('ai-answer-box');
+  const content = document.getElementById('ai-answer-content');
+  const meta = document.getElementById('ai-answer-meta');
+
+  btn.disabled = true;
+  btn.textContent = 'Thinking...';
+  box.style.display = 'block';
+  content.innerHTML = '<span class="thinking-dots">Thinking</span>';
+  meta.textContent = '';
+
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ question: q }),
+    });
+    const data = await res.json();
+    content.textContent = data.answer || 'No response received.';
+    meta.textContent = data.model_used ? `Answered by ${data.model_used}` : '';
+  } catch(e) {
+    content.textContent = 'Error connecting to AI. Is the server running?';
+    meta.textContent = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ask AI';
+  }
+}
+
+// ─── Document Tracker ────────────────────────────────
+let _docsListOpen = true;
+let _allDocs = [];
+
+function renderDocsList(entries) {
+  _allDocs = (entries || []).filter(e => e.source_type === 'document');
+  document.getElementById('docs-count').textContent = _allDocs.length;
+  const searchWrap = document.getElementById('docs-search-wrap');
+  if (searchWrap) searchWrap.style.display = _allDocs.length ? 'block' : 'none';
+  _renderDocsFiltered(_allDocs);
+}
+
+function _renderDocsFiltered(docs) {
+  const listEl = document.getElementById('docs-list');
+  const emptyEl = document.getElementById('docs-empty');
+  if (!docs.length) {
+    emptyEl.style.display = 'block';
+    listEl.innerHTML = '';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  listEl.innerHTML = docs.map((d) => {
+    const filename = d.source_url || 'Unnamed document';
+    const words = d.content ? d.content.trim().split(/\s+/).length : 0;
+    const safeContent = (d.content || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+    return `
+    <div class="doc-item" id="doc-item-${d.id}">
+      <div class="doc-item-header">
+        <span style="font-size:15px;">📄</span>
+        <button class="doc-item-name-btn" title="Click to view" onclick="openDocViewer('${esc(filename)}', '${formatDate(d.created_at)}', ${words}, \`${safeContent}\`)">${esc(filename)}</button>
+        <span class="doc-item-date">${formatDate(d.created_at)}</span>
+        <button class="doc-delete-btn" title="Delete document" onclick="deleteDoc(${d.id}, '${esc(filename)}')">✕</button>
+      </div>
+      <div class="doc-item-meta">${words.toLocaleString()} words indexed</div>
+    </div>`;
+  }).join('');
+}
+
+function filterDocs() {
+  const q = (document.getElementById('docs-search-input').value || '').toLowerCase();
+  const filtered = q ? _allDocs.filter(d => (d.source_url || '').toLowerCase().includes(q)) : _allDocs;
+  _renderDocsFiltered(filtered);
+}
+
+async function deleteDoc(entryId, filename) {
+  if (!confirm(`Delete "${filename}"? This removes it from the AI index.`)) return;
+  try {
+    const res = await fetch(API + `/api/entries/${entryId}`, {
+      method: 'DELETE', headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed');
+    const el = document.getElementById(`doc-item-${entryId}`);
+    if (el) el.remove();
+    _allDocs = _allDocs.filter(d => d.id !== entryId);
+    document.getElementById('docs-count').textContent = _allDocs.length;
+    if (!_allDocs.length) {
+      document.getElementById('docs-empty').style.display = 'block';
+      document.getElementById('docs-search-wrap').style.display = 'none';
+    }
+    showToast('Document deleted', 'success');
+  } catch(e) {
+    showToast('Could not delete document', 'error');
+  }
+}
+
+function toggleDocsList() {
+  _docsListOpen = !_docsListOpen;
+  document.getElementById('docs-list-body').style.display = _docsListOpen ? 'block' : 'none';
+  document.getElementById('docs-chevron').textContent = _docsListOpen ? '▼' : '▶';
+}
+
+function openDocViewer(filename, date, words, content) {
+  document.getElementById('doc-viewer-filename').textContent = filename;
+  document.getElementById('doc-viewer-meta').textContent = `${date} · ${words.toLocaleString()} words`;
+  document.getElementById('doc-viewer-body').textContent = content;
+  document.getElementById('doc-viewer-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDocViewer(e) {
+  if (e && e.target !== document.getElementById('doc-viewer-overlay') && e.target !== document.getElementById('doc-viewer-close')) return;
+  document.getElementById('doc-viewer-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Close on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDocViewer({ target: document.getElementById('doc-viewer-overlay') });
+});
+
+// ─── Feed Data ───────────────────────────────────────
+function onWaFileSelected() {
+  const f = document.getElementById('wa-file-input').files[0];
+  document.getElementById('wa-filename').textContent = f ? '✓ ' + f.name : '';
+}
+
+function onDocFileSelected() {
+  const f = document.getElementById('doc-file-input').files[0];
+  document.getElementById('doc-filename').textContent = f ? '✓ ' + f.name : '';
+}
+
+async function _postFeed(formData, riskMsg) {
+  const res = await fetch(API + `/api/clients/${currentClientId}/feed`, {
+    method: 'POST', headers: authHeaders(), body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed');
+  if (data.risk_triggered) {
+    document.getElementById('risk-banner').style.display = 'flex';
+    showToast(riskMsg || '⚠️ Risk keywords detected — client flagged AT RISK', 'error');
+  }
+  return data;
+}
+
+async function uploadWaFile() {
+  const input = document.getElementById('wa-file-input');
+  const btn = document.getElementById('wa-upload-btn');
+  if (!input.files[0]) { showToast('Please select a .txt file first', 'error'); return; }
+  if (!currentClientId) return;
+  const form = new FormData();
+  form.append('source_type', 'whatsapp');
+  form.append('file', input.files[0]);
+  btn.disabled = true; btn.textContent = 'Uploading...';
+  try {
+    await _postFeed(form);
+    showToast('WhatsApp export imported — AI has access to this conversation', 'success');
+    input.value = ''; document.getElementById('wa-filename').textContent = '';
+    await refreshTimeline();
+  } catch(e) { showToast(e.message || 'Upload failed', 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Upload Export'; }
+}
+
+async function saveWaPaste() {
+  const dateInput = document.getElementById('wa-paste-date');
+  const text = document.getElementById('wa-paste-input').value.trim();
+  const btn = document.getElementById('wa-paste-btn');
+  const dateErr = document.getElementById('wa-paste-date-error');
+  dateErr.style.display = 'none';
+
+  if (!dateInput.value) { dateErr.style.display = 'block'; return; }
+  // Validate not in future
+  if (new Date(dateInput.value) > new Date()) { dateErr.textContent = 'Conversation date cannot be in the future.'; dateErr.style.display = 'block'; return; }
+  if (!text) { showToast('Paste some messages first', 'error'); return; }
+  if (!currentClientId) return;
+
+  const form = new FormData();
+  form.append('source_type', 'whatsapp');
+  form.append('content', text);
+  form.append('conversation_date', dateInput.value);
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    await _postFeed(form);
+    showToast('Chat saved — AI will use this with its date context', 'success');
+    document.getElementById('wa-paste-input').value = '';
+    dateInput.value = '';
+    await refreshTimeline();
+  } catch(e) { showToast(e.message || 'Save failed', 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Save Chat'; }
+}
+
+async function fetchFathom() {
+  const url = document.getElementById('fathom-url-input').value.trim();
+  const btn = document.getElementById('fathom-btn');
+  const urlErr = document.getElementById('fathom-url-error');
+  const statusEl = document.getElementById('fathom-status');
+  urlErr.style.display = 'none'; statusEl.style.display = 'none';
+
+  if (!url.startsWith('https://fathom.video/')) {
+    urlErr.style.display = 'block'; return;
+  }
+  if (!currentClientId) return;
+
+  const form = new FormData();
+  form.append('source_type', 'fathom');
+  form.append('url', url);
+  btn.disabled = true; btn.textContent = 'Fetching';
+  statusEl.className = 'feed-inline-msg'; statusEl.textContent = 'Fetching transcript…'; statusEl.style.display = 'block';
+
+  try {
+    await _postFeed(form);
+    statusEl.className = 'feed-inline-msg success'; statusEl.textContent = 'Transcript saved successfully';
+    document.getElementById('fathom-url-input').value = '';
+    await refreshTimeline();
+  } catch(e) {
+    statusEl.className = 'feed-inline-msg error';
+    statusEl.textContent = 'Could not fetch transcript. The link may be private or expired.';
+  } finally { btn.disabled = false; btn.textContent = 'Fetch Transcript'; }
+}
+
+async function uploadDocument() {
+  const input = document.getElementById('doc-file-input');
+  const btn = document.getElementById('doc-upload-btn');
+  const statusEl = document.getElementById('doc-status');
+  statusEl.style.display = 'none';
+
+  if (!input.files[0]) { showToast('Please select a PDF file first', 'error'); return; }
+  if (!currentClientId) return;
+
+  const form = new FormData();
+  form.append('file', input.files[0]);
+  btn.disabled = true; btn.textContent = 'Uploading...';
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}/feed/document`, {
+      method: 'POST', headers: authHeaders(), body: form,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+    statusEl.className = 'feed-inline-msg success';
+    statusEl.textContent = `${data.filename} — Indexed successfully`;
+    statusEl.style.display = 'block';
+    if (data.risk_triggered) {
+      document.getElementById('risk-banner').style.display = 'flex';
+      showToast('⚠️ Risk keywords found in document — client flagged AT RISK', 'error');
+    } else {
+      showToast('Document indexed — AI can now answer questions about it', 'success');
+    }
+    input.value = ''; document.getElementById('doc-filename').textContent = '';
+    await refreshTimeline();
+  } catch(e) {
+    statusEl.className = 'feed-inline-msg error';
+    statusEl.textContent = e.message || 'Could not read this PDF. Please check the file is not password-protected.';
+    statusEl.style.display = 'block';
+  } finally { btn.disabled = false; btn.textContent = 'Upload PDF'; }
+}
+
+async function saveNote() {
+  const type = document.getElementById('note-type-select').value;
+  const text = document.getElementById('note-content-input').value.trim();
+  const btn = document.getElementById('note-save-btn');
+  if (!text) { showToast('Please enter some content', 'error'); return; }
+  if (!currentClientId) return;
+
+  const form = new FormData();
+  form.append('source_type', type);
+  form.append('content', text);
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    await _postFeed(form);
+    const label = document.getElementById('note-type-select').selectedOptions[0].text;
+    showToast(`${label} saved`, 'success');
+    document.getElementById('note-content-input').value = '';
+    await refreshTimeline();
+  } catch(e) { showToast(e.message || 'Save failed', 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Save'; }
+}
+
+async function refreshTimeline() {
+  if (!currentClientId) return;
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}`, { headers: authHeaders() });
+    const data = await res.json();
+    renderTimeline(data.data_entries);
+    renderDocsList(data.data_entries);
+    // Update last updated display
+    const luEl = document.getElementById('dash-last-updated');
+    if (data.client && data.client.last_updated) {
+      luEl.textContent = 'Last updated: ' + formatDate(data.client.last_updated);
+      luEl.style.display = 'block';
+    }
+    // Refresh sidebar list entry
+    loadClients();
+  } catch(e) { /* silent */ }
+}
+
+// ─── Add Client Modal ────────────────────────────────
+async function openAddClientModal() {
+  document.getElementById('nc-name').value = '';
+  document.getElementById('nc-deadline').value = '';
+  document.getElementById('nc-risk').checked = false;
+
+  if (currentUser && currentUser.role === 'admin') {
+    const sel = document.getElementById('nc-pm');
+    sel.innerHTML = '<option value="">— Select PM —</option>';
+    try {
+      const res = await fetch(API + '/api/users/pms', { headers: authHeaders() });
+      if (res.ok) {
+        const pms = await res.json();
+        pms.forEach(pm => {
+          const opt = document.createElement('option');
+          opt.value = pm.name;
+          opt.textContent = pm.name;
+          sel.appendChild(opt);
+        });
+      }
+    } catch(e) {}
+  }
+
+  document.getElementById('add-client-modal').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+async function submitNewClient() {
+  const name = document.getElementById('nc-name').value.trim();
+  const case_type = document.getElementById('nc-case-type').value;
+  const deadline = document.getElementById('nc-deadline').value;
+  const assigned_pm = document.getElementById('nc-pm').value.trim();
+  const status = document.getElementById('nc-status').value;
+  const risk_flag = document.getElementById('nc-risk').checked;
+  if (!name) { showToast('Client name is required', 'error'); return; }
+  try {
+    const res = await fetch(API + '/api/clients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ name, case_type, deadline: deadline || null, assigned_pm, status, risk_flag }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed');
+    showToast('Client added!', 'success');
+    closeModal('add-client-modal');
+    await loadClients();
+    if (data.id) selectClient(data.id);
+  } catch(e) {
+    showToast(e.message || 'Failed to add client', 'error');
+  }
+}
+
+// ─── Delete Client ───────────────────────────────────
+function confirmDeleteClient() {
+  if (!currentClientId) return;
+  const name = document.getElementById('dash-name').textContent;
+  if (!confirm(`Delete "${name}" and all their data? This cannot be undone.`)) return;
+  deleteClient();
+}
+
+async function deleteClient() {
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}`, { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) throw new Error('Delete failed');
+    showToast('Client deleted', 'info');
+    currentClientId = null;
+    document.getElementById('client-dashboard').style.display = 'none';
+    document.getElementById('welcome-screen').style.display = 'flex';
+    document.getElementById('actions-list').innerHTML = '<div class="empty-state" style="margin-top:40px;">Select a client to see action items.</div>';
+    document.getElementById('add-action-form').style.display = 'none';
+    await loadClients();
+  } catch(e) {
+    showToast('Failed to delete client', 'error');
+  }
+}
+
+// ─── Utils ───────────────────────────────────────────
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+function formatDate(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch { return iso.substring(0, 10); }
+}
+
+let toastTimer;
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = type; }, 3200);
+}
+
+// ─── Editable Deadline ────────────────────────────────
+function openDeadlineEdit() {
+  const wrap = document.getElementById('deadline-edit-wrap');
+  if (wrap.style.display === 'block') { cancelDeadlineEdit(); return; }
+  // Pre-fill with current deadline value (strip the "(Xd)" suffix)
+  const raw = document.getElementById('dash-deadline').textContent.split(' ')[0];
+  const input = document.getElementById('deadline-date-input');
+  input.value = raw && raw !== '—' && raw !== 'Not' ? raw : '';
+  wrap.style.display = 'block';
+  document.getElementById('deadline-card').style.borderColor = 'var(--accent)';
+  input.focus();
+}
+
+function cancelDeadlineEdit() {
+  document.getElementById('deadline-edit-wrap').style.display = 'none';
+  document.getElementById('deadline-card').style.borderColor = '';
+}
+
+function _computeRisk(deadlineStr) {
+  if (!deadlineStr) return { risk_flag: false, status: null };
+  const days = Math.ceil((new Date(deadlineStr) - new Date()) / 86400000);
+  if (days < 0)       return { risk_flag: true,  status: 'At Risk', label: 'overdue' };
+  if (days <= 14)     return { risk_flag: true,  status: 'At Risk', label: `${days}d — urgent` };
+  if (days <= 30)     return { risk_flag: true,  status: null,      label: `${days}d` };
+  return               { risk_flag: false, status: 'Active',        label: `${days}d` };
+}
+
+function _renderDeadlineCard(deadlineStr) {
+  const dlEl = document.getElementById('dash-deadline');
+  if (!deadlineStr) { dlEl.textContent = 'Not set'; dlEl.className = 'stat-card-value'; return; }
+  const days = Math.ceil((new Date(deadlineStr) - new Date()) / 86400000);
+  dlEl.textContent = `${deadlineStr} (${days >= 0 ? '' : ''}${days}d)`;
+  dlEl.className = 'stat-card-value' + (days <= 30 ? ' deadline-close' : '');
+}
+
+async function saveDeadline() {
+  const newDeadline = document.getElementById('deadline-date-input').value;
+  if (!newDeadline || !currentClientId) { showToast('Pick a date first', 'error'); return; }
+
+  const { risk_flag, status } = _computeRisk(newDeadline);
+
+  // Build patch payload — always update deadline + risk; only auto-update status if going At Risk or Active
+  const payload = { deadline: newDeadline, risk_flag };
+  if (status) payload.status = status;
+
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+
+    // Update deadline card display
+    _renderDeadlineCard(newDeadline);
+
+    // Update risk banner + status card
+    document.getElementById('risk-banner').style.display = risk_flag ? 'flex' : 'none';
+    if (status) {
+      const stEl = document.getElementById('dash-status');
+      stEl.textContent = status;
+      stEl.className = 'stat-card-value ' + (status === 'At Risk' ? 'status-atrisk' : 'status-active');
+    }
+
+    cancelDeadlineEdit();
+    const days = Math.ceil((new Date(newDeadline) - new Date()) / 86400000);
+    const msg = days < 0
+      ? `⚠️ Deadline set — case flagged AT RISK (${Math.abs(days)}d overdue)`
+      : days <= 30
+        ? `⚠️ Deadline set — flagged at risk (${days}d remaining)`
+        : `✅ Deadline updated — ${days} days remaining`;
+    showToast(msg, risk_flag ? 'error' : 'success');
+    await loadClients();
+  } catch(e) {
+    showToast(e.message || 'Update failed', 'error');
+  }
+}
+
+// ─── Edit Client Name / Visa Type ────────────────────
+function startEditClient() {
+  const name = document.getElementById('dash-name').textContent;
+  const caseType = document.getElementById('dash-case-badge').textContent;
+  document.getElementById('edit-name-input').value = name;
+  const sel = document.getElementById('edit-case-select');
+  // Set the matching option, or add a custom one
+  let found = false;
+  for (let opt of sel.options) { if (opt.value === caseType) { sel.value = caseType; found = true; break; } }
+  if (!found) {
+    const opt = document.createElement('option');
+    opt.value = caseType; opt.textContent = caseType;
+    sel.appendChild(opt); sel.value = caseType;
+  }
+  document.getElementById('dash-view-mode').style.display = 'none';
+  document.getElementById('dash-edit-mode').style.display = 'flex';
+  document.getElementById('edit-name-input').focus();
+}
+
+function cancelEditClient() {
+  document.getElementById('dash-edit-mode').style.display = 'none';
+  document.getElementById('dash-view-mode').style.display = 'flex';
+}
+
+async function saveEditClient() {
+  const name = document.getElementById('edit-name-input').value.trim();
+  const case_type = document.getElementById('edit-case-select').value;
+  if (!name) { showToast('Name cannot be empty', 'error'); return; }
+  if (!currentClientId) return;
+
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ name, case_type }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Update failed'); }
+
+    document.getElementById('dash-name').textContent = name;
+    document.getElementById('dash-case-badge').textContent = case_type;
+    document.getElementById('dash-case-type').textContent = case_type;
+    cancelEditClient();
+    showToast('Client updated', 'success');
+    await loadClients();
+  } catch(e) {
+    showToast(e.message || 'Update failed', 'error');
+  }
+}
+
+// ─── Custom Select ───────────────────────────────────
+function toggleCSelect(id) {
+  const wrap = document.getElementById(id);
+  const trigger = wrap.querySelector('.cselect-trigger');
+  const list = wrap.querySelector('.cselect-list');
+  const isOpen = list.classList.contains('open');
+  // Close all open cselects first
+  document.querySelectorAll('.cselect-list.open').forEach(l => { l.classList.remove('open'); l.closest('.cselect').querySelector('.cselect-trigger').classList.remove('open'); });
+  if (!isOpen) { list.classList.add('open'); trigger.classList.add('open'); }
+}
+
+function pickPosition(value) {
+  document.getElementById('reg-position').value = value;
+  const display = document.getElementById('reg-position-display');
+  display.textContent = value;
+  display.classList.add('selected');
+  // Update active state
+  document.querySelectorAll('#reg-position-list .cselect-option').forEach(o => {
+    o.classList.toggle('active', o.textContent.trim() === value);
+  });
+  toggleCSelect('reg-position-cselect');
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.cselect') && !e.target.closest('.pm-stat-card')) {
+    document.querySelectorAll('.cselect-list.open').forEach(l => { l.classList.remove('open'); l.closest('.cselect').querySelector('.cselect-trigger').classList.remove('open'); });
+    closePmDropdown();
+  }
+});
+
+// ─── Inline PM Assignment ─────────────────────────────
+let pmListCache = [];
+
+async function initPmCard() {
+  const card = document.getElementById('pm-stat-card');
+  if (!currentUser || currentUser.role !== 'admin') {
+    card.classList.remove('pm-assign-card');
+    document.getElementById('pm-assign-hint').style.display = 'none';
+    card.onclick = null;
+    return;
+  }
+  card.classList.add('pm-assign-card');
+  document.getElementById('pm-assign-hint').style.display = 'block';
+  card.onclick = (e) => { e.stopPropagation(); openPmDropdown(); };
+}
+
+async function openPmDropdown() {
+  const dropdown = document.getElementById('pm-inline-dropdown');
+  if (dropdown.classList.contains('open')) { closePmDropdown(); return; }
+
+  // Fetch PM list if not cached
+  if (!pmListCache.length) {
+    try {
+      const res = await fetch(API + '/api/users/pms', { headers: authHeaders() });
+      if (res.ok) pmListCache = await res.json();
+    } catch(e) {}
+  }
+
+  const currentPm = document.getElementById('dash-pm').textContent;
+  dropdown.innerHTML = [
+    { name: '— Unassigned —', id: 0 },
+    ...pmListCache
+  ].map(pm => `
+    <div class="pm-inline-option ${pm.name === currentPm ? 'current' : ''}"
+         onclick="assignPM(${pm.id || 0}, '${esc(pm.name === '— Unassigned —' ? '' : pm.name)}')">
+      ${esc(pm.name)}
+    </div>
+  `).join('');
+
+  dropdown.classList.add('open');
+}
+
+function closePmDropdown() {
+  document.getElementById('pm-inline-dropdown').classList.remove('open');
+}
+
+async function assignPM(pmId, pmName) {
+  closePmDropdown();
+  if (!currentClientId) return;
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}/assign-pm`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ pm_name: pmName }),
+    });
+    if (!res.ok) throw new Error('Failed');
+    document.getElementById('dash-pm').textContent = pmName || 'Unassigned';
+    showToast(pmName ? `Assigned to ${pmName}` : 'PM removed', 'success');
+    await loadClients();
+  } catch(e) {
+    showToast('Failed to assign PM', 'error');
+  }
+}
+
+// ─── Bulk Import ─────────────────────────────────────
+let importFile = null;
+
+function openImportModal() {
+  importFile = null;
+  document.getElementById('import-file-input').value = '';
+  document.getElementById('import-drop-label').textContent = 'Click to choose file or drag & drop here';
+  document.getElementById('import-drop-zone').style.display = 'block';
+  document.getElementById('import-progress').style.display = 'none';
+  document.getElementById('import-result-list').innerHTML = '';
+  document.getElementById('import-submit-btn').disabled = true;
+  document.getElementById('import-modal').classList.add('open');
+}
+
+function onImportFileSelected() {
+  const input = document.getElementById('import-file-input');
+  if (input.files[0]) { importFile = input.files[0]; updateImportDropLabel(); }
+}
+
+function updateImportDropLabel() {
+  if (importFile) {
+    document.getElementById('import-drop-label').textContent = '✓ ' + importFile.name;
+    document.getElementById('import-submit-btn').disabled = false;
+  }
+}
+
+function onImportDragOver(e) { e.preventDefault(); document.getElementById('import-drop-zone').classList.add('drag-over'); }
+function onImportDragLeave(e) { document.getElementById('import-drop-zone').classList.remove('drag-over'); }
+function onImportDrop(e) {
+  e.preventDefault();
+  document.getElementById('import-drop-zone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) { importFile = f; updateImportDropLabel(); }
+}
+
+function setImportProgress(pct) {
+  document.getElementById('import-progress-bar').style.width = pct + '%';
+}
+
+async function submitImport() {
+  if (!importFile) return;
+  const btn = document.getElementById('import-submit-btn');
+  const progressEl = document.getElementById('import-progress');
+  const statusEl = document.getElementById('import-status-text');
+  const resultList = document.getElementById('import-result-list');
+
+  btn.disabled = true;
+  btn.textContent = 'Importing...';
+  progressEl.style.display = 'block';
+  setImportProgress(15);
+  statusEl.textContent = 'Extracting text from file...';
+  resultList.innerHTML = '';
+
+  const form = new FormData();
+  form.append('file', importFile);
+
+  try {
+    setImportProgress(40);
+    statusEl.textContent = 'AI is reading and parsing client records...';
+
+    const res = await fetch(API + '/api/clients/bulk-import', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: form,
+    });
+
+    setImportProgress(90);
+    const data = await res.json();
+
+    if (!res.ok) {
+      statusEl.textContent = '❌ ' + (data.detail || 'Import failed.');
+      setImportProgress(0);
+      btn.disabled = false;
+      btn.textContent = 'Import Clients';
+      return;
+    }
+
+    setImportProgress(100);
+    statusEl.textContent = `✅ Successfully imported ${data.imported} client${data.imported !== 1 ? 's' : ''}!`;
+    resultList.innerHTML = data.clients.map(c =>
+      `<div class="import-result-item">✓ ${esc(c.name)} — ${esc(c.case_type)}</div>`
+    ).join('');
+
+    await loadClients();
+    showToast(`${data.imported} clients imported!`, 'success');
+    btn.textContent = 'Done';
+  } catch(e) {
+    statusEl.textContent = '❌ Could not connect to server.';
+    setImportProgress(0);
+    btn.disabled = false;
+    btn.textContent = 'Import Clients';
+  }
+}
+
+// Start
+init();
+</script>
+</body>
+</html>
