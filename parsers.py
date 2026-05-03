@@ -67,44 +67,45 @@ def parse_whatsapp_txt(content: str, client_name: str) -> str:
 
 
 async def fetch_fathom_transcript(url: str) -> str:
+    import json, html as html_module
     url = url.strip()
     if not url.startswith("https://fathom.video/"):
         return "ERROR: URL must start with https://fathom.video/ — other URLs are not allowed."
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
     try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            resp = await client.get(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-                },
-            )
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
             resp.raise_for_status()
-            html = resp.text
+            page_html = resp.text
 
-            patterns = [
-                r'<div[^>]*class="[^"]*transcript[^"]*"[^>]*>(.*?)</div>',
-                r'<p[^>]*class="[^"]*transcript[^"]*"[^>]*>(.*?)</p>',
-                r'"transcript"\s*:\s*"(.*?)"',
-                r'<div[^>]*data-testid="transcript[^"]*"[^>]*>(.*?)</div>',
-                r'class="[^"]*Transcript[^"]*"[^>]*>(.*?)</div>',
-            ]
-            for pattern in patterns:
-                matches = re.findall(pattern, html, re.DOTALL | re.IGNORECASE)
-                if matches:
-                    raw = " ".join(matches)
-                    clean = re.sub(r"<[^>]+>", " ", raw)
-                    clean = re.sub(r"\s+", " ", clean).strip()
-                    if len(clean) > 100:
-                        return f"Fathom call transcript:\n{clean[:8000]}"
+            # Fathom embeds page props as JSON in data-page attribute of #app div
+            m = re.search(r'id="app"\s+data-page="([^"]+)"', page_html)
+            if m:
+                raw_json = html_module.unescape(m.group(1))
+                try:
+                    page_data = json.loads(raw_json)
+                    props = page_data.get("props", {})
+                    transcript_url = props.get("copyTranscriptUrl")
+                    if transcript_url:
+                        t_resp = await client.get(transcript_url, headers=headers)
+                        t_resp.raise_for_status()
+                        t_data = t_resp.json()
+                        raw_html = t_data.get("html", "")
+                        if raw_html:
+                            # Strip HTML tags and clean up whitespace
+                            clean = re.sub(r"<br\s*/?>", "\n", raw_html, flags=re.IGNORECASE)
+                            clean = re.sub(r"<[^>]+>", "", clean)
+                            clean = html_module.unescape(clean)
+                            clean = re.sub(r"\n{3,}", "\n\n", clean).strip()
+                            if len(clean) > 100:
+                                return f"Fathom call transcript:\n{clean[:12000]}"
+                except (json.JSONDecodeError, KeyError):
+                    pass
 
-            # Fallback: strip all HTML and return page text
-            clean = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
-            clean = re.sub(r"<style[^>]*>.*?</style>", "", clean, flags=re.DOTALL)
-            clean = re.sub(r"<[^>]+>", " ", clean)
-            clean = re.sub(r"\s+", " ", clean).strip()
-            if len(clean) > 200:
-                return f"Fathom page content (transcript may require login):\n{clean[:5000]}"
-            return "Could not extract transcript. The link may be private or expired."
+            return "Could not extract transcript. The link may be private or the recording is still processing."
 
     except httpx.HTTPStatusError as e:
         return f"ERROR fetching Fathom link: HTTP {e.response.status_code}"
