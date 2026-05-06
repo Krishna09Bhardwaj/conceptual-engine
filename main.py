@@ -35,20 +35,9 @@ from vector_store import init_vector_store, add_to_vector_store, delete_client_v
 from ai_engine import query_client_ai, generate_summary, parse_clients_from_text
 from parsers import parse_whatsapp_txt, fetch_fathom_transcript, extract_text_from_file
 from auth import login as auth_login, get_user_from_token, logout as auth_logout
+from risk_engine import flag_if_keyword
 
-_RISK_KEYWORDS = {
-    "overdue", "expired", "urgent", "missed deadline",
-    "rfe", "denial", "no response",
-}
-
-def _flag_risk_if_keywords(client_id: int, content: str) -> bool:
-    low = content.lower()
-    if any(kw in low for kw in _RISK_KEYWORDS):
-        update_client(client_id, risk_flag=True)
-        return True
-    return False
-
-app = FastAPI(title="JineeGreenCard Client 360", version="1.0.0")
+app = FastAPI(title="JineeGreenCard Client 360", version="2.0.0")
 
 # CORS — open for demo; restrict before production
 app.add_middleware(
@@ -414,7 +403,7 @@ async def feed_data(
                 parsed = f"[Conversation Date: {conversation_date}]\n\n{parsed}"
             entry_id = add_data_entry(client_id, "whatsapp", parsed)
             add_to_vector_store(client_id, client["name"], "whatsapp", parsed, entry_id)
-            risk = _flag_risk_if_keywords(client_id, parsed)
+            risk = flag_if_keyword(client_id, parsed)
             return {"message": "WhatsApp conversation imported", "entry_id": entry_id, "risk_triggered": risk}
 
         elif source_type == "fathom":
@@ -423,7 +412,7 @@ async def feed_data(
             transcript = await fetch_fathom_transcript(url.strip())
             entry_id = add_data_entry(client_id, "fathom", transcript, source_url=url.strip())
             add_to_vector_store(client_id, client["name"], "fathom", transcript, entry_id)
-            risk = _flag_risk_if_keywords(client_id, transcript)
+            risk = flag_if_keyword(client_id, transcript)
             return {"message": "Fathom transcript fetched", "entry_id": entry_id, "preview": transcript[:200], "risk_triggered": risk}
 
         elif source_type in ("email", "note", "meeting", "wa_call", "internal"):
@@ -434,7 +423,7 @@ async def feed_data(
             text = content.strip()[:50000]
             entry_id = add_data_entry(client_id, actual_type, text)
             add_to_vector_store(client_id, client["name"], actual_type, text, entry_id)
-            risk = _flag_risk_if_keywords(client_id, text)
+            risk = flag_if_keyword(client_id, text)
             return {"message": f"Saved", "entry_id": entry_id, "risk_triggered": risk}
 
         else:
@@ -487,7 +476,7 @@ async def feed_document(
 
     entry_id = add_data_entry(client_id, "document", text, source_url=file.filename)
     add_to_vector_store(client_id, client["name"], "document", text, entry_id)
-    risk = _flag_risk_if_keywords(client_id, text)
+    risk = flag_if_keyword(client_id, text)
     return {
         "message": "Document indexed successfully",
         "entry_id": entry_id,
