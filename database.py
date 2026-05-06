@@ -60,6 +60,24 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients(id)
         );
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id INTEGER,
+            detail TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS pm_digests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pm_name TEXT NOT NULL,
+            digest_text TEXT NOT NULL,
+            date TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts
+            USING fts5(content, source_type, client_id UNINDEXED, entry_id UNINDEXED);
     """)
     conn.commit()
     # Migrate existing DBs that don't have the position column yet
@@ -125,8 +143,15 @@ def add_data_entry(client_id, source_type, content, source_url=None, added_by="P
         "INSERT INTO data_entries (client_id, source_type, content, source_url, added_by) VALUES (?,?,?,?,?)",
         (client_id, source_type, content[:10000], source_url, added_by),
     )
-    conn.commit()
     entry_id = c.lastrowid
+    try:
+        conn.execute(
+            "INSERT INTO entries_fts(content, source_type, client_id, entry_id) VALUES (?,?,?,?)",
+            (content[:10000], source_type, str(client_id), str(entry_id)),
+        )
+    except Exception:
+        pass
+    conn.commit()
     conn.close()
     update_client_timestamp(client_id)
     return entry_id
@@ -270,3 +295,81 @@ def get_clients_for_pm(pm_name: str):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def log_audit(user_id: int, action: str, entity_type: str = None, entity_id: int = None, detail: str = None):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO audit_log (user_id, action, entity_type, entity_id, detail) VALUES (?,?,?,?,?)",
+        (user_id, action, entity_type, entity_id, detail),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_audit_log(limit: int = 100) -> list:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT a.*, u.username, u.name as user_name FROM audit_log a "
+        "LEFT JOIN users u ON a.user_id = u.id "
+        "ORDER BY a.created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def store_digest(pm_name: str, digest_text: str):
+    from datetime import date
+    today = date.today().isoformat()
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO pm_digests (pm_name, digest_text, date) VALUES (?,?,?)",
+        (pm_name, digest_text, today),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_latest_digest(pm_name: str) -> dict | None:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM pm_digests WHERE pm_name=? ORDER BY created_at DESC LIMIT 1",
+        (pm_name,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_pm_activity_summary() -> list:
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT
+            c.assigned_pm,
+            COUNT(DISTINCT de.client_id) as clients_updated,
+            SUM(CASE WHEN c.risk_flag=1 THEN 1 ELSE 0 END) as at_risk_count,
+            MAX(s.created_at) as last_login
+        FROM clients c
+        LEFT JOIN data_entries de ON de.client_id = c.id
+            AND de.created_at >= datetime('now', '-7 days')
+        LEFT JOIN sessions s ON s.user_id = (
+            SELECT id FROM users WHERE name = c.assigned_pm LIMIT 1
+        )
+        WHERE c.assigned_pm IS NOT NULL
+        GROUP BY c.assigned_pm
+        ORDER BY clients_updated DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def search_entries_fts(client_id: int, query: str) -> list:
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT content FROM entries_fts WHERE client_id=? AND entries_fts MATCH ? ORDER BY rank LIMIT 10",
+            (str(client_id), query),
+        ).fetchall()
+    except Exception:
+        rows = []
+    conn.close()
+    return [r["content"] for r in rows]
