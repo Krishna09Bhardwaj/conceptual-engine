@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, date
 
 DB_PATH = "client360.db"
 
@@ -160,6 +160,7 @@ def add_data_entry(client_id, source_type, content, source_url=None, added_by="P
 def delete_data_entry(entry_id: int):
     conn = get_conn()
     conn.execute("DELETE FROM data_entries WHERE id=?", (entry_id,))
+    conn.execute("DELETE FROM entries_fts WHERE entry_id=?", (str(entry_id),))
     conn.commit()
     conn.close()
 
@@ -207,6 +208,7 @@ def delete_client(client_id: int):
     conn = get_conn()
     conn.execute("DELETE FROM action_items WHERE client_id=?", (client_id,))
     conn.execute("DELETE FROM data_entries WHERE client_id=?", (client_id,))
+    conn.execute("DELETE FROM entries_fts WHERE client_id=?", (str(client_id),))
     conn.execute("DELETE FROM clients WHERE id=?", (client_id,))
     conn.commit()
     conn.close()
@@ -319,7 +321,6 @@ def get_audit_log(limit: int = 100) -> list:
 
 
 def store_digest(pm_name: str, digest_text: str):
-    from datetime import date
     today = date.today().isoformat()
     conn = get_conn()
     conn.execute(
@@ -333,7 +334,7 @@ def store_digest(pm_name: str, digest_text: str):
 def get_latest_digest(pm_name: str) -> dict | None:
     conn = get_conn()
     row = conn.execute(
-        "SELECT * FROM pm_digests WHERE pm_name=? ORDER BY created_at DESC LIMIT 1",
+        "SELECT * FROM pm_digests WHERE pm_name=? ORDER BY created_at DESC, id DESC LIMIT 1",
         (pm_name,),
     ).fetchone()
     conn.close()
