@@ -12,15 +12,26 @@ from llama_index.core import StorageContext
 
 CHROMA_PATH = "./chroma_db"
 
-Settings.embed_model = HuggingFaceEmbedding(model_name="all-MiniLM-L6-v2")
-Settings.transformations = [SentenceSplitter(chunk_size=512, chunk_overlap=50)]
-
 _chroma_client: chromadb.PersistentClient | None = None
+_settings_configured = False
+
+
+def _configure_settings():
+    global _settings_configured
+    if _settings_configured:
+        return
+    try:
+        Settings.embed_model = HuggingFaceEmbedding(model_name="all-MiniLM-L6-v2")
+        Settings.transformations = [SentenceSplitter(chunk_size=512, chunk_overlap=50)]
+        _settings_configured = True
+    except Exception as e:
+        print(f"[vector_store] Settings configuration failed: {e}")
 
 
 def _get_chroma() -> chromadb.PersistentClient:
     global _chroma_client
     if _chroma_client is None:
+        _configure_settings()
         _chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
     return _chroma_client
 
@@ -28,8 +39,7 @@ def _get_chroma() -> chromadb.PersistentClient:
 def _get_index(client_id: int) -> VectorStoreIndex:
     collection = _get_chroma().get_or_create_collection(f"client_{client_id}")
     vector_store = ChromaVectorStore(chroma_collection=collection)
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    return VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context)
+    return VectorStoreIndex.from_vector_store(vector_store)
 
 
 def add_to_vector_store(client_id: int, client_name: str, source_type: str, content: str, entry_id: int):
@@ -51,8 +61,8 @@ def add_to_vector_store(client_id: int, client_name: str, source_type: str, cont
             [doc],
             storage_context=storage_context,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[vector_store] add_to_vector_store client={client_id} entry={entry_id} error: {e}")
 
 
 def query_client(client_id: int, question: str, n_results: int = 5) -> list[str]:
@@ -92,8 +102,9 @@ def rebuild_client_index(client_id: int):
                 content=entry["content"],
                 entry_id=entry["id"],
             )
-    except Exception:
-        pass
+        print(f"[vector_store] rebuild_client_index client={client_id}: {len(entries)} entries indexed")
+    except Exception as e:
+        print(f"[vector_store] rebuild_client_index client={client_id} error: {e}")
 
 
 def init_vector_store():

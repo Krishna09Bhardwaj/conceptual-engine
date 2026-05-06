@@ -36,8 +36,10 @@ def test_different_clients_isolated():
     from vector_store import add_to_vector_store, query_client
     add_to_vector_store(1, "Client A", "note", "Client A has an RFE pending.", 1)
     add_to_vector_store(2, "Client B", "note", "Client B deadline is March 2027.", 2)
+    results_a = query_client(client_id=1, question="RFE", n_results=5)
     results_b = query_client(client_id=2, question="RFE", n_results=5)
-    assert not any("Client A" in r for r in results_b)
+    assert any("RFE" in r or "Client A" in r for r in results_a), "Client A should find its own RFE data"
+    assert not any("Client A" in r for r in results_b), "Client B should not see Client A's data"
 
 def test_delete_removes_vectors():
     from vector_store import add_to_vector_store, query_client, delete_client_vectors
