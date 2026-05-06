@@ -11,3 +11,17 @@ aiofiles
 pypdf
 pdfplumber
 python-docx
+llama-index
+llama-index-vector-stores-chroma
+llama-index-embeddings-huggingface
+litellm
+instructor
+mem0ai
+apscheduler
+spacy
+markitdown[all]
+dateparser
+python-dateutil
+pytz
+pytest
+pytest-asyncio
