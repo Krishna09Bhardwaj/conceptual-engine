@@ -30,6 +30,7 @@ from database import (
     init_db, is_db_empty, get_all_clients, get_clients_for_pm, get_all_pms, get_client, create_client,
     update_client, add_data_entry, get_data_entries, delete_data_entry,
     add_action_item, get_action_items, toggle_action_item, delete_client,
+    log_audit,
 )
 from vector_store import init_vector_store, add_to_vector_store, delete_client_vectors
 from ai_engine import query_client_ai, generate_summary, parse_clients_from_text
@@ -493,7 +494,8 @@ async def query_client_endpoint(client_id: int, body: QueryRequest, authorizatio
         raise HTTPException(401, "Not authenticated")
     _check_client_access(client_id, user)
     try:
-        result = query_client_ai(client_id, body.question)
+        result = query_client_ai(client_id, body.question, pm_username=user["username"])
+        log_audit(user["id"], "ai_query", "client", client_id, body.question[:100])
         return result
     except Exception as e:
         raise HTTPException(500, f"AI query error: {str(e)[:100]}")
