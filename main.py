@@ -415,6 +415,7 @@ async def feed_data(
             entry_id = add_data_entry(client_id, "whatsapp", parsed)
             add_to_vector_store(client_id, client["name"], "whatsapp", parsed, entry_id)
             risk = flag_if_keyword(client_id, parsed)
+            log_audit(user["id"], "feed_whatsapp", "client", client_id, f"{len(parsed)} chars")
             return {"message": "WhatsApp conversation imported", "entry_id": entry_id, "risk_triggered": risk}
 
         elif source_type == "fathom":
@@ -424,6 +425,7 @@ async def feed_data(
             entry_id = add_data_entry(client_id, "fathom", transcript, source_url=url.strip())
             add_to_vector_store(client_id, client["name"], "fathom", transcript, entry_id)
             risk = flag_if_keyword(client_id, transcript)
+            log_audit(user["id"], "feed_fathom", "client", client_id, url.strip()[:100])
             return {"message": "Fathom transcript fetched", "entry_id": entry_id, "preview": transcript[:200], "risk_triggered": risk}
 
         elif source_type in ("email", "note", "meeting", "wa_call", "internal"):
@@ -435,6 +437,7 @@ async def feed_data(
             entry_id = add_data_entry(client_id, actual_type, text)
             add_to_vector_store(client_id, client["name"], actual_type, text, entry_id)
             risk = flag_if_keyword(client_id, text)
+            log_audit(user["id"], "feed_note", "client", client_id, actual_type)
             return {"message": f"Saved", "entry_id": entry_id, "risk_triggered": risk}
 
         else:
@@ -660,6 +663,76 @@ def run_startup():
 
     print("\n🚀 Server starting at http://localhost:8000")
     print("=" * 55 + "\n")
+
+
+# ─── Admin Routes ─────────────────────────────────────────────────────────────
+
+def _require_admin(user: dict):
+    if not user or user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+
+
+@app.get("/api/admin/clients")
+async def admin_all_clients(
+    pm: Optional[str] = None,
+    risk: Optional[str] = None,
+    case_type: Optional[str] = None,
+    search: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
+):
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    _require_admin(user)
+
+    from risk_engine import rule_based_risk
+    clients = get_all_clients()
+
+    if pm:
+        clients = [c for c in clients if c.get("assigned_pm") == pm]
+    if risk == "at_risk":
+        clients = [c for c in clients if c.get("risk_flag")]
+    elif risk == "safe":
+        clients = [c for c in clients if not c.get("risk_flag")]
+    if case_type:
+        clients = [c for c in clients if c.get("case_type", "").lower() == case_type.lower()]
+    if search:
+        s = search.lower()
+        clients = [c for c in clients if s in c.get("name", "").lower()]
+
+    for c in clients:
+        c["risk_level"] = rule_based_risk(c)
+
+    return {"clients": clients, "total": len(clients)}
+
+
+@app.get("/api/admin/audit")
+async def admin_audit_log(limit: int = 100, authorization: Optional[str] = Header(None)):
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    _require_admin(user)
+    from database import get_audit_log
+    return {"entries": get_audit_log(limit=min(limit, 500))}
+
+
+@app.get("/api/admin/pm-summary")
+async def admin_pm_summary(authorization: Optional[str] = Header(None)):
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    _require_admin(user)
+    from database import get_pm_activity_summary
+    return {"summary": get_pm_activity_summary()}
+
+
+@app.get("/api/clients/{client_id}/digest")
+async def get_digest(client_id: int, authorization: Optional[str] = Header(None)):
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    client = _check_client_access(client_id, user)
+    from database import get_latest_digest
+    digest = get_latest_digest(client.get("assigned_pm", ""))
+    return {"digest": digest}
 
 
 if __name__ == "__main__":
