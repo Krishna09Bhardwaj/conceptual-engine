@@ -1,21 +1,56 @@
 import re
 import httpx
 
+_nlp = None
+
+def _get_nlp():
+    global _nlp
+    if _nlp is None:
+        try:
+            import spacy
+            _nlp = spacy.load("en_core_web_sm")
+        except Exception:
+            _nlp = False
+    return _nlp
+
+
+def extract_dates_from_text(text: str) -> list:
+    """Extract date/time entities from text using spaCy."""
+    if not text.strip():
+        return []
+    nlp = _get_nlp()
+    if not nlp:
+        return []
+    try:
+        doc = nlp(text[:50000])
+        return [ent.text for ent in doc.ents if ent.label_ in ("DATE", "TIME")]
+    except Exception:
+        return []
+
 
 def extract_text_from_file(filename: str, file_bytes: bytes) -> str:
     ext = filename.rsplit(".", 1)[-1].lower()
     if ext == "pdf":
+        # Try MarkItDown first (better LLM-ready output), fall back to pdfplumber
         import io
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(file_bytes))
-        pages = [page.extract_text() or "" for page in reader.pages]
+        try:
+            from markitdown import MarkItDown
+            md = MarkItDown()
+            result = md.convert_stream(io.BytesIO(file_bytes), file_extension=".pdf")
+            text = result.text_content
+            if text and len(text.strip()) > 100:
+                return text[:40000]
+        except Exception:
+            pass
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            pages = [page.extract_text() or "" for page in pdf.pages]
         return "\n".join(pages)[:40000]
     elif ext in ("docx", "doc"):
         import io
         from docx import Document
         doc = Document(io.BytesIO(file_bytes))
         lines = [p.text for p in doc.paragraphs if p.text.strip()]
-        # also grab tables
         for table in doc.tables:
             for row in table.rows:
                 lines.append(" | ".join(c.text.strip() for c in row.cells if c.text.strip()))
