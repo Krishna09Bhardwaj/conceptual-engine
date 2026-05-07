@@ -19,6 +19,7 @@ if not os.getenv("GROQ_API_KEY", "").strip():
     sys.exit(1)
 # ─────────────────────────────────────────────────────────────────────────────
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -37,8 +38,17 @@ from ai_engine import query_client_ai, generate_summary, parse_clients_from_text
 from parsers import parse_whatsapp_txt, fetch_fathom_transcript, extract_text_from_file
 from auth import login as auth_login, get_user_from_token, logout as auth_logout
 from risk_engine import flag_if_keyword
+from scheduler import start_scheduler, stop_scheduler
 
-app = FastAPI(title="JineeGreenCard Client 360", version="2.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    yield
+    stop_scheduler()
+
+
+app = FastAPI(title="JineeGreenCard Client 360", version="2.0.0", lifespan=lifespan)
 
 # CORS — open for demo; restrict before production
 app.add_middleware(
