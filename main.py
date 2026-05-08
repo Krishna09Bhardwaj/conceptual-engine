@@ -141,6 +141,14 @@ def _check_client_access(client_id: int, user: dict):
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
+@app.get("/admin", response_class=HTMLResponse)
+async def serve_admin():
+    html_path = Path(__file__).parent / "frontend" / "admin.html"
+    if not html_path.exists():
+        return HTMLResponse("<h1>Admin page not found</h1>", status_code=404)
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
     html_path = Path(__file__).parent / "frontend" / "index.html"
@@ -595,6 +603,18 @@ async def assign_pm(client_id: int, body: dict, authorization: Optional[str] = H
     pm_name = str(body.get("pm_name", "")).strip()[:100]
     update_client(client_id, assigned_pm=pm_name)
     return {"message": "PM assigned", "assigned_pm": pm_name}
+
+
+@app.patch("/api/clients/{client_id}/clear-risk")
+async def clear_risk(client_id: int, authorization: Optional[str] = Header(None)):
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    _check_client_access(client_id, user)
+    update_client(client_id, risk_flag=False)
+    log_audit(user["id"], "clear_risk", "client", client_id, "Risk flag manually cleared")
+    return {"message": "Risk flag cleared"}
 
 
 @app.delete("/api/entries/{entry_id}", status_code=200)

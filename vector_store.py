@@ -3,6 +3,11 @@ Vector store: LlamaIndex + ChromaDB, per-client collections named client_{id}.
 Embeddings: all-MiniLM-L6-v2 via HuggingFace (local, no API cost).
 Chunking: 512 tokens, 50-token overlap.
 """
+import os
+os.environ.setdefault("TRANSFORMERS_CACHE", "./model_cache")
+os.environ.setdefault("HF_HOME", "./model_cache")
+os.makedirs("./model_cache", exist_ok=True)
+
 import chromadb
 from llama_index.core import VectorStoreIndex, Document, Settings
 from llama_index.core.node_parser import SentenceSplitter
@@ -13,17 +18,20 @@ from llama_index.core import StorageContext
 CHROMA_PATH = "./chroma_db"
 
 _chroma_client: chromadb.PersistentClient | None = None
-_settings_configured = False
+_embed_model: HuggingFaceEmbedding | None = None
+
+
+def _get_embed_model() -> HuggingFaceEmbedding:
+    global _embed_model
+    if _embed_model is None:
+        _embed_model = HuggingFaceEmbedding(model_name="all-MiniLM-L6-v2")
+    return _embed_model
 
 
 def _configure_settings():
-    global _settings_configured
-    if _settings_configured:
-        return
     try:
-        Settings.embed_model = HuggingFaceEmbedding(model_name="all-MiniLM-L6-v2")
+        Settings.embed_model = _get_embed_model()
         Settings.transformations = [SentenceSplitter(chunk_size=512, chunk_overlap=50)]
-        _settings_configured = True
     except Exception as e:
         print(f"[vector_store] Settings configuration failed: {e}")
 
@@ -31,7 +39,7 @@ def _configure_settings():
 def _get_chroma() -> chromadb.PersistentClient:
     global _chroma_client
     if _chroma_client is None:
-        _configure_settings()
+        _configure_settings()  # idempotent — sets Settings.embed_model once
         _chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
     return _chroma_client
 

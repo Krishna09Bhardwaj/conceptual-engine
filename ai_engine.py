@@ -3,6 +3,11 @@ import re
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+from dotenv import load_dotenv
+load_dotenv()
+os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY", "")
+os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
+
 import litellm
 import instructor
 from pydantic import BaseModel
@@ -30,23 +35,82 @@ You have the client's full conversation history — WhatsApp, Fathom calls, emai
 
 RULES:
 - Always return structured JSON matching the ClientStatus schema exactly.
-- pending_items: list of things NOT yet done.
-- completed_items: list of things already done.
+- pending_items: list of things NOT yet done. ONLY include if question is about pending work.
+- completed_items: list of things already done. ONLY include if question is about completed work.
 - next_deadline: the most important upcoming deadline as a date string or 'Not set'.
 - risk_level: 'at_risk' if urgent/overdue/RFE/denial, 'watch' if deadline within 30 days or stale, 'safe' otherwise.
 - immediate_action_items: 1-3 concrete next actions the PM should take NOW.
-- key_context: direct answer to the specific question asked. 2-5 sentences max.
-- current_status: one sentence summary of overall case status."""
+- key_context: DIRECT answer to the specific question asked. 2-5 sentences. DO NOT give a general status update unless that is what was asked.
+- current_status: one sentence summary of overall case status.
+- IMPORTANT: Your answer must be clearly different depending on the question asked."""
+
+# Intent detection — handled before LLM, no AI call needed
+_ACTION_INTENTS = {
+    "clear_risk": [
+        "mark as healthy", "mark as safe", "clear risk", "remove flag",
+        "unmark risk", "clear the risk", "remove risk flag", "mark not at risk",
+        "not at risk anymore", "resolved risk",
+    ],
+    "mark_active": [
+        "mark as active", "set status active", "reactivate", "set to active",
+    ],
+    "mark_on_hold": [
+        "mark as on hold", "put on hold", "set to on hold", "pause case",
+    ],
+    "mark_completed": [
+        "mark as completed", "mark complete", "case is done", "set to completed",
+        "close the case",
+    ],
+}
+
+
+def _detect_intent(question: str) -> str | None:
+    q = question.lower().strip()
+    for intent, phrases in _ACTION_INTENTS.items():
+        for phrase in phrases:
+            if phrase in q:
+                return intent
+    return None
+
+
+# Question-type routing for biased retrieval
+_QUESTION_BIAS = {
+    "risk":     ["risk", "overdue", "urgent", "danger", "expired", "rfe", "denial", "red flag", "at risk"],
+    "pending":  ["pending", "not done", "incomplete", "remaining", "still need", "missing", "outstanding"],
+    "completed":["completed", "done", "finished", "submitted", "received", "approved", "filed"],
+    "summary":  ["summary", "overview", "full status", "everything", "update", "brief"],
+    "conversation": ["conversation", "whatsapp", "call", "transcript", "fathom", "talked", "said", "mentioned"],
+    "deadline": ["deadline", "when", "date", "due", "expiry", "expires", "timeline"],
+}
+
+
+def _detect_question_type(question: str) -> str:
+    q = question.lower()
+    for qtype, keywords in _QUESTION_BIAS.items():
+        if any(kw in q for kw in keywords):
+            return qtype
+    return "general"
 
 
 def _get_context_chunks(client_id: int, question: str, max_chars: int = 6000) -> list:
-    """Hybrid retrieval: vector search → FTS5 keyword → SQLite fallback."""
+    """Hybrid retrieval: vector search → FTS5 keyword → SQLite fallback. Question-type biased."""
+    q_type = _detect_question_type(question)
     chunks = []
+
+    # Build retrieval query: actual question + type-specific bias keywords
+    bias_terms = {
+        "risk": "risk overdue urgent RFE denial",
+        "pending": "pending incomplete missing outstanding",
+        "completed": "completed done submitted filed approved",
+        "conversation": "WhatsApp call transcript Fathom",
+        "deadline": "deadline date due expiry",
+    }.get(q_type, "")
+    retrieval_query = f"{question} {bias_terms}".strip()
 
     try:
         from vector_store import query_client as vector_query, is_vector_ready
         if is_vector_ready():
-            chunks = vector_query(client_id, question, n_results=5)
+            chunks = vector_query(client_id, retrieval_query, n_results=6)
     except Exception:
         pass
 
@@ -56,7 +120,7 @@ def _get_context_chunks(client_id: int, question: str, max_chars: int = 6000) ->
             for hit in fts_hits:
                 if hit not in chunks:
                     chunks.append(hit)
-                    if len(chunks) >= 8:
+                    if len(chunks) >= 10:
                         break
         except Exception:
             pass
@@ -64,6 +128,9 @@ def _get_context_chunks(client_id: int, question: str, max_chars: int = 6000) ->
     if not chunks:
         try:
             entries = get_data_entries(client_id)
+            # For conversation questions, prefer whatsapp/fathom source types
+            if q_type == "conversation":
+                entries = sorted(entries, key=lambda e: 0 if e.get("source_type") in ("whatsapp", "fathom") else 1)
             total = 0
             for entry in entries:
                 content = entry.get("content", "")
@@ -97,7 +164,8 @@ Notes: {client.get('notes') or 'None'}
 
 {context_str}
 
-QUESTION: {question}"""
+SPECIFIC QUESTION TO ANSWER: {question}
+IMPORTANT: Answer SPECIFICALLY the above question. Do NOT give a general status update unless the question asks for one. Your key_context field must directly answer: "{question}"."""
 
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -115,12 +183,49 @@ def _call_structured(messages: list, model: str) -> ClientStatus:
 
 
 def query_client_ai(client_id: int, question: str, pm_username: str = None) -> dict:
+    from database import update_client
     client = get_client(client_id)
     if not client:
         return {"status": None, "model_used": "none", "error": True,
                 "error_message": "Client not found."}
 
     question = question.strip()[:500]
+
+    # ── Intent detection — handle action commands without LLM ──
+    intent = _detect_intent(question)
+    if intent == "clear_risk":
+        update_client(client_id, risk_flag=False)
+        return {
+            "action": "clear_risk",
+            "message": f"✅ Risk flag cleared for {client['name']}. The AT RISK banner has been removed.",
+            "model_used": "intent_engine",
+            "error": False,
+        }
+    if intent == "mark_active":
+        update_client(client_id, status="Active", risk_flag=False)
+        return {
+            "action": "status_update",
+            "message": f"✅ {client['name']} marked as Active.",
+            "model_used": "intent_engine",
+            "error": False,
+        }
+    if intent == "mark_on_hold":
+        update_client(client_id, status="On Hold")
+        return {
+            "action": "status_update",
+            "message": f"✅ {client['name']} set to On Hold.",
+            "model_used": "intent_engine",
+            "error": False,
+        }
+    if intent == "mark_completed":
+        update_client(client_id, status="Completed", risk_flag=False)
+        return {
+            "action": "status_update",
+            "message": f"✅ {client['name']} marked as Completed.",
+            "model_used": "intent_engine",
+            "error": False,
+        }
+
     chunks = _get_context_chunks(client_id, question)
 
     if pm_username:
@@ -134,16 +239,18 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
 
     messages = _build_messages(client, chunks, question)
 
-    groq_key = os.getenv("GROQ_API_KEY", "").strip()
-    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
     for model, key in [
         ("groq/llama-3.3-70b-versatile", groq_key),
         ("gemini/gemini-2.5-flash", gemini_key),
     ]:
         if not key:
+            print(f"[ai_engine] Skipping {model} — API key not set")
             continue
         try:
+            print(f"[ai_engine] Attempting {model} for client={client_id}")
             status = _call_structured(messages, model)
 
             if pm_username:
@@ -153,8 +260,10 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
                 except Exception:
                     pass
 
+            print(f"[ai_engine] ✅ {model} responded successfully")
             return {"status": status.model_dump(), "model_used": model, "error": False}
-        except Exception:
+        except Exception as e:
+            print(f"[ai_engine] ❌ {model} failed: {type(e).__name__}: {str(e)[:200]}")
             continue
 
     return {

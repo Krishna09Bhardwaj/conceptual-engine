@@ -197,7 +197,7 @@ def add_action_item(client_id, task, assigned_to=None, due_date=None):
 def get_action_items(client_id: int):
     conn = get_conn()
     rows = conn.execute(
-        "SELECT * FROM action_items WHERE client_id=? ORDER BY completed ASC, created_at DESC",
+        "SELECT DISTINCT id, client_id, task, assigned_to, due_date, completed, created_at FROM action_items WHERE client_id=? ORDER BY completed ASC, created_at DESC",
         (client_id,),
     ).fetchall()
     conn.close()

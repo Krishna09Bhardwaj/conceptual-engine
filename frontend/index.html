@@ -429,7 +429,7 @@
   </div>
   <div id="import-client-btn" onclick="openImportModal()">📂 Upload Client List</div>
   <div id="add-client-btn" onclick="openAddClientModal()">+ Add Client</div>
-  <div id="admin-btn" onclick="toggleAdminPanel()">🛡 Admin View</div>
+  <div id="admin-btn" onclick="window.location.href='/admin'">🛡 Admin View</div>
   <div id="user-bar">
     <div id="user-bar-info">
       <div id="user-bar-name">—</div>
@@ -499,7 +499,8 @@
 
       <div id="risk-banner" class="risk-banner" style="display:none;">
         <span class="risk-icon">⚠️</span>
-        <span>This client is flagged AT RISK — immediate attention required. Check action items.</span>
+        <span style="flex:1;">This client is flagged AT RISK — immediate attention required. Check action items.</span>
+        <button onclick="clearRisk()" style="padding:5px 12px;background:#fff;border:1px solid #fca5a5;color:#991b1b;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">✓ Mark as Healthy</button>
       </div>
 
       <div class="stat-cards">
@@ -993,6 +994,9 @@ async function init() {
         // Merge stored position into currentUser (me endpoint may not return it)
         currentUser = { ...data, position: stored_parsed.position || data.position || '' };
         showApp();
+        // Deep-link from admin page: /?client_id=X
+        const clientIdParam = new URLSearchParams(window.location.search).get('client_id');
+        if (clientIdParam) selectClient(parseInt(clientIdParam, 10));
         return;
       }
     } catch(e) {}
@@ -1121,6 +1125,27 @@ function renderDashboard(client, entries, actions) {
   document.getElementById('add-action-form').style.display = 'block';
 }
 
+// ─── Clear Risk ──────────────────────────────────────
+async function clearRisk() {
+  if (!currentClientId) return;
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}/clear-risk`, {
+      method: 'PATCH', headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed');
+    document.getElementById('risk-banner').style.display = 'none';
+    const stEl = document.getElementById('dash-status');
+    if (stEl && stEl.textContent === 'At Risk') {
+      stEl.textContent = 'Active';
+      stEl.className = 'stat-card-value status-active';
+    }
+    showToast('Risk flag cleared — client marked as healthy', 'success');
+    await loadClients();
+  } catch(e) {
+    showToast('Failed to clear risk flag', 'error');
+  }
+}
+
 // ─── Timeline ───────────────────────────────────────
 const _TL_ICONS = { whatsapp: '💬', fathom: '🎙', email: '📧', note: '📝', document: '📄', meeting: '📋', wa_call: '📞', internal: '🔒' };
 const _TL_LABELS = { whatsapp: 'WhatsApp', fathom: 'Fathom', email: 'Email', note: 'Note', document: 'Document', meeting: 'Meeting', wa_call: 'WA Call', internal: 'Internal' };
@@ -1166,11 +1191,13 @@ function toggleEntry(uid, btn) {
 // ─── Action Items ────────────────────────────────────
 function renderActions(actions) {
   const el = document.getElementById('actions-list');
-  if (!actions.length) {
+  // Deduplicate by id
+  const unique = [...new Map((actions || []).map(i => [i.id, i])).values()];
+  if (!unique.length) {
     el.innerHTML = '<div class="empty-state" style="margin-top:20px;">No action items yet.</div>';
     return;
   }
-  el.innerHTML = actions.map(a => `
+  el.innerHTML = unique.map(a => `
     <div class="action-item ${a.completed ? 'completed-item' : ''}" id="action-${a.id}">
       <input type="checkbox" ${a.completed ? 'checked' : ''} onchange="toggleAction(${a.id}, this.checked)">
       <div>
@@ -1253,11 +1280,24 @@ async function askAI() {
       body: JSON.stringify({ question: q }),
     });
     const data = await res.json();
-    if (data.error || !data.status) {
-      content.innerHTML = '<p style="color:var(--red);">AI could not generate a structured response. Please try again.</p>';
+    if (data.action) {
+      // Intent handled — show confirmation, sync UI state
+      content.innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;font-size:14px;color:#166534;">${esc(data.message)}</div>`;
+      meta.textContent = '';
+      if (data.action === 'clear_risk' || data.action === 'status_update') {
+        document.getElementById('risk-banner').style.display = 'none';
+        // Refresh client data silently to sync status card
+        selectClient(currentClientId);
+      }
+    } else if (data.error || !data.status) {
+      content.innerHTML = '<p style="color:var(--red);">AI could not generate a response. Please try again.</p>';
       meta.textContent = data.model_used ? `Attempted with ${data.model_used}` : '';
     } else {
       content.innerHTML = _renderClientStatus(data.status, data.model_used);
+      // Auto-sync: if AI says safe, clear risk banner locally
+      if (data.status.risk_level === 'safe') {
+        document.getElementById('risk-banner').style.display = 'none';
+      }
       meta.textContent = '';
     }
   } catch(e) {

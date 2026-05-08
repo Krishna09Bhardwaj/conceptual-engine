@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — JineeGreenCard Client 360</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #1a1a2e; --accent: #0f3460; --green: #10b981;
+    --red: #ef4444; --yellow: #f59e0b; --gray: #9ca3af;
+    --gray-light: #f3f4f6; --white: #ffffff; --text: #111827;
+    --text-muted: #6b7280; --border: #e5e7eb;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: var(--text); }
+  #topbar { background: var(--navy); padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+  #topbar h1 { font-size: 15px; font-weight: 700; color: #fff; }
+  #topbar .sub { font-size: 12px; color: rgba(255,255,255,0.45); margin-left: 4px; }
+  #topbar a { margin-left: auto; font-size: 12px; color: rgba(255,255,255,0.6); text-decoration: none; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; }
+  #topbar a:hover { color: #fff; border-color: rgba(255,255,255,0.5); }
+  #auth-wall { display: flex; align-items: center; justify-content: center; height: 80vh; }
+  .auth-box { background: #fff; border-radius: 12px; padding: 32px; width: 360px; box-shadow: 0 4px 24px rgba(0,0,0,0.12); text-align: center; }
+  .auth-box h2 { font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+  .auth-box p { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+  .auth-box button { width: 100%; padding: 10px; background: var(--navy); color: #fff; border: none; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  #content { display: none; max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .tabs { display: flex; gap: 0; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: fit-content; }
+  .tab-btn { padding: 9px 20px; border: none; background: var(--gray-light); font-size: 13px; cursor: pointer; color: var(--text-muted); font-weight: 500; transition: all 0.15s; }
+  .tab-btn.active { background: var(--navy); color: #fff; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid var(--border); margin-bottom: 20px; }
+  .card-title { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 14px; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .filters input, .filters select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
+  .filters input { width: 220px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 8px 12px; text-align: left; background: #f8fafc; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; }
+  tr:hover td { background: #f8fafc; cursor: pointer; }
+  .risk-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .risk-at_risk { background: #fee2e2; color: #991b1b; }
+  .risk-watch { background: #fef9c3; color: #854d0e; }
+  .risk-safe { background: #dcfce7; color: #166534; }
+  .pm-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .pm-name { font-size: 14px; font-weight: 600; color: var(--navy); min-width: 160px; }
+  .pm-stat { font-size: 12px; color: var(--text-muted); }
+  .pm-stat strong { color: var(--text); }
+  .pm-stat.danger strong { color: var(--red); }
+  .audit-row { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; display: flex; gap: 12px; }
+  .audit-action { font-weight: 600; color: var(--navy); min-width: 100px; }
+  .audit-meta { color: var(--text-muted); flex: 1; }
+  .audit-time { color: var(--text-muted); white-space: nowrap; }
+  .empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
+  .stat-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-box { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; flex: 1; min-width: 120px; }
+  .stat-box-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .stat-box-value { font-size: 22px; font-weight: 700; color: var(--navy); }
+  .stat-box-value.danger { color: var(--red); }
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--navy); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>JineeGreenCard <span class="sub">Admin Dashboard</span></h1>
+  <a href="/">← Back to Client 360</a>
+</div>
+
+<div id="auth-wall">
+  <div class="auth-box">
+    <h2>Admin Access Only</h2>
+    <p>You must be logged in as an admin in the main app.<br>Please log in at the main dashboard first.</p>
+    <button onclick="window.location.href='/'">Go to Login</button>
+  </div>
+</div>
+
+<div id="content">
+  <div class="stat-row" id="stat-row"></div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('clients')">All Clients</button>
+    <button class="tab-btn" onclick="switchTab('pms')">PM Summary</button>
+    <button class="tab-btn" onclick="switchTab('audit')">Audit Log</button>
+  </div>
+
+  <!-- Clients Tab -->
+  <div class="tab-panel active" id="tab-clients">
+    <div class="card">
+      <div class="card-title">All Clients</div>
+      <div class="filters">
+        <input type="text" id="search-input" placeholder="Search by name..." oninput="filterClients()">
+        <select id="filter-risk" onchange="filterClients()">
+          <option value="">All Risk Levels</option>
+          <option value="at_risk">At Risk</option>
+          <option value="watch">Watch</option>
+          <option value="safe">Safe</option>
+        </select>
+        <select id="filter-pm" onchange="filterClients()">
+          <option value="">All PMs</option>
+        </select>
+        <select id="filter-case" onchange="filterClients()">
+          <option value="">All Case Types</option>
+          <option value="O-1A">O-1A</option>
+          <option value="O-1B">O-1B</option>
+          <option value="EB-1A">EB-1A</option>
+          <option value="EB-1B">EB-1B</option>
+          <option value="EB-2 NIW">EB-2 NIW</option>
+          <option value="H-1B">H-1B</option>
+          <option value="L-1A">L-1A</option>
+          <option value="TN">TN</option>
+        </select>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Client Name</th>
+            <th>Case Type</th>
+            <th>PM</th>
+            <th>Deadline</th>
+            <th>Status</th>
+            <th>Risk</th>
+          </tr>
+        </thead>
+        <tbody id="clients-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PM Summary Tab -->
+  <div class="tab-panel" id="tab-pms">
+    <div id="pm-cards"></div>
+  </div>
+
+  <!-- Audit Tab -->
+  <div class="tab-panel" id="tab-audit">
+    <div class="card">
+      <div class="card-title">Recent Activity (last 100 actions)</div>
+      <div id="audit-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '';
+let _allClients = [];
+let _token = null;
+
+function authHeaders() {
+  return _token ? { 'Authorization': 'Bearer ' + _token } : {};
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch { return iso.slice(0,10); }
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['clients','pms','audit'][i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+async function init() {
+  const stored = localStorage.getItem('c360_user');
+  if (!stored) { return; }
+  let user;
+  try { user = JSON.parse(stored); } catch { return; }
+  if (!user || user.role !== 'admin' || !user.token) { return; }
+
+  // Verify token still valid
+  try {
+    const res = await fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + user.token } });
+    if (!res.ok) { return; }
+  } catch { return; }
+
+  _token = user.token;
+  document.getElementById('auth-wall').style.display = 'none';
+  document.getElementById('content').style.display = 'block';
+  await loadAll();
+}
+
+async function loadAll() {
+  await Promise.all([loadClients(), loadPMs(), loadAudit()]);
+}
+
+async function loadClients() {
+  try {
+    const res = await fetch(API + '/api/admin/clients', { headers: authHeaders() });
+    if (!res.ok) { toast('Failed to load clients'); return; }
+    const data = await res.json();
+    _allClients = Array.isArray(data) ? data : (data.clients || []);
+    populatePMFilter();
+    renderStats();
+    renderClients(_allClients);
+  } catch(e) { toast('Error loading clients'); }
+}
+
+function populatePMFilter() {
+  const sel = document.getElementById('filter-pm');
+  const pms = [...new Set(_allClients.map(c => c.assigned_pm || 'Unassigned'))].sort();
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All PMs</option>' + pms.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  if (cur) sel.value = cur;
+}
+
+function renderStats() {
+  const total = _allClients.length;
+  const atRisk = _allClients.filter(c => (c.risk_level || 'safe') === 'at_risk').length;
+  const watch = _allClients.filter(c => (c.risk_level || 'safe') === 'watch').length;
+  const deadlineSoon = _allClients.filter(c => {
+    if (!c.deadline) return false;
+    const d = Math.ceil((new Date(c.deadline) - new Date()) / 86400000);
+    return d >= 0 && d <= 14;
+  }).length;
+  document.getElementById('stat-row').innerHTML = `
+    <div class="stat-box"><div class="stat-box-label">Total Clients</div><div class="stat-box-value">${total}</div></div>
+    <div class="stat-box"><div class="stat-box-label">At Risk</div><div class="stat-box-value danger">${atRisk}</div></div>
+    <div class="stat-box"><div class="stat-box-label">Watch</div><div class="stat-box-value" style="color:var(--yellow)">${watch}</div></div>
+    <div class="stat-box"><div class="stat-box-label">Deadline ≤14d</div><div class="stat-box-value danger">${deadlineSoon}</div></div>`;
+}
+
+function filterClients() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const risk = document.getElementById('filter-risk').value;
+  const pm = document.getElementById('filter-pm').value;
+  const cas = document.getElementById('filter-case').value;
+  let rows = _allClients;
+  if (q) rows = rows.filter(c => c.name.toLowerCase().includes(q));
+  if (risk) rows = rows.filter(c => (c.risk_level || 'safe') === risk);
+  if (pm) rows = rows.filter(c => (c.assigned_pm || 'Unassigned') === pm);
+  if (cas) rows = rows.filter(c => c.case_type === cas);
+  renderClients(rows);
+}
+
+function renderClients(rows) {
+  const tbody = document.getElementById('clients-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No clients match the filter.</td></tr>';
+    return;
+  }
+  const riskLabel = { safe: 'Safe', watch: 'Watch', at_risk: 'At Risk' };
+  tbody.innerHTML = rows.map(c => {
+    const rl = c.risk_level || 'safe';
+    const days = c.deadline ? Math.ceil((new Date(c.deadline) - new Date()) / 86400000) : null;
+    const dlText = c.deadline ? `${c.deadline}${days !== null ? ` (${days}d)` : ''}` : '—';
+    const dlColor = days !== null && days <= 14 ? 'color:var(--red)' : days !== null && days <= 30 ? 'color:var(--yellow)' : '';
+    return `<tr onclick="openClient(${c.id})">
+      <td style="font-weight:500;">${esc(c.name)}</td>
+      <td>${esc(c.case_type)}</td>
+      <td>${esc(c.assigned_pm || 'Unassigned')}</td>
+      <td style="${dlColor}">${esc(dlText)}</td>
+      <td>${esc(c.status)}</td>
+      <td><span class="risk-badge risk-${rl}">${riskLabel[rl] || rl}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function openClient(id) {
+  window.location.href = `/?client_id=${id}`;
+}
+
+async function loadPMs() {
+  try {
+    const res = await fetch(API + '/api/admin/pm-summary', { headers: authHeaders() });
+    if (!res.ok) { document.getElementById('pm-cards').innerHTML = '<div class="empty">Could not load PM summary.</div>'; return; }
+    const data = await res.json();
+    const pms = Array.isArray(data) ? data : (data.summary || []);
+    if (!pms.length) { document.getElementById('pm-cards').innerHTML = '<div class="empty">No PM data yet.</div>'; return; }
+    document.getElementById('pm-cards').innerHTML = pms.map(pm => {
+      const name = pm.pm_name || pm.assigned_pm || '—';
+      const clients = pm.total_clients ?? pm.clients_updated ?? '—';
+      const atRisk = pm.at_risk ?? pm.at_risk_count ?? 0;
+      const lastActive = pm.last_active || pm.last_login;
+      return `<div class="pm-card">
+        <div class="pm-name">${esc(name)}</div>
+        <div class="pm-stat">Clients: <strong>${clients}</strong></div>
+        <div class="pm-stat danger">At Risk: <strong>${atRisk}</strong></div>
+        <div class="pm-stat">Last active: <strong>${lastActive ? fmtDate(lastActive) : 'Never'}</strong></div>
+      </div>`;
+    }).join('');
+  } catch(e) { document.getElementById('pm-cards').innerHTML = '<div class="empty">Error loading PM data.</div>'; }
+}
+
+async function loadAudit() {
+  try {
+    const res = await fetch(API + '/api/admin/audit?limit=100', { headers: authHeaders() });
+    if (!res.ok) { document.getElementById('audit-list').innerHTML = '<div class="empty">Could not load audit log.</div>'; return; }
+    const data = await res.json();
+    const entries = Array.isArray(data) ? data : (data.entries || []);
+    if (!entries.length) { document.getElementById('audit-list').innerHTML = '<div class="empty">No audit entries yet.</div>'; return; }
+    document.getElementById('audit-list').innerHTML = entries.map(e => `
+      <div class="audit-row">
+        <span class="audit-action">${esc(e.action)}</span>
+        <span class="audit-meta">${esc(e.detail || '')}${e.entity_type ? ` · ${esc(e.entity_type)} #${e.entity_id}` : ''}</span>
+        <span class="audit-time">${fmtDate(e.created_at)}</span>
+      </div>`).join('');
+  } catch(e) { document.getElementById('audit-list').innerHTML = '<div class="empty">Error loading audit log.</div>'; }
+}
+
+init();
+</script>
+</body>
+</html>
