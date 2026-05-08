@@ -16,6 +16,7 @@ from typing import Literal
 from database import get_client, get_data_entries, search_entries_fts
 
 litellm.set_verbose = False
+litellm.suppress_debug_info = True
 
 
 class ClientStatus(BaseModel):
@@ -49,7 +50,9 @@ _ACTION_INTENTS = {
     "clear_risk": [
         "mark as healthy", "mark as safe", "clear risk", "remove flag",
         "unmark risk", "clear the risk", "remove risk flag", "mark not at risk",
-        "not at risk anymore", "resolved risk",
+        "not at risk anymore", "resolved risk", "remove the flag", "unflag",
+        "remove as flag", "remove client flag", "remove the client",
+        "no longer at risk", "not at risk", "clear flag", "remove risk",
     ],
     "mark_active": [
         "mark as active", "set status active", "reactivate", "set to active",
