@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -17,6 +18,11 @@ from database import get_client, get_data_entries, search_entries_fts
 
 litellm.set_verbose = False
 litellm.suppress_debug_info = True
+
+# Silence instructor's internal retry/exception loggers that print XML noise
+logging.getLogger("instructor").setLevel(logging.CRITICAL)
+logging.getLogger("litellm").setLevel(logging.CRITICAL)
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
 
 
 class ClientStatus(BaseModel):
@@ -291,9 +297,13 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
+    # Gemini first — no daily TPD cap on free tier.
+    # Groq 8b second — 500k TPD (5× the 70b limit), fast.
+    # Groq 70b last — quality fallback, use only when others fail.
     for model, key in [
-        ("groq/llama-3.3-70b-versatile", groq_key),
         ("gemini/gemini-2.5-flash", gemini_key),
+        ("groq/llama-3.1-8b-instant", groq_key),
+        ("groq/llama-3.3-70b-versatile", groq_key),
     ]:
         if not key:
             print(f"[ai_engine] Skipping {model} — API key not set")
