@@ -1305,7 +1305,8 @@ async function askAI() {
     }
 
     if (data.error || !data.status) {
-      content.innerHTML = '<p style="color:var(--red);">AI could not generate a response. Please try again.</p>';
+      const errMsg = data.error_message || 'AI could not generate a response. Please try again.';
+      content.innerHTML = `<p style="color:var(--red);">${esc(errMsg)}</p>`;
       meta.textContent = data.model_used ? `Attempted with ${data.model_used}` : '';
       return;
     }

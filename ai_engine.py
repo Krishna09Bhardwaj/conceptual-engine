@@ -221,12 +221,19 @@ IMPORTANT: Answer SPECIFICALLY the above question. Do NOT give a general status 
 
 
 def _call_structured(messages: list, model: str) -> ClientStatus:
-    return _instructor_client.chat.completions.create(
-        model=model,
-        messages=messages,
-        response_model=ClientStatus,
-        max_retries=2,
-    )
+    # Redirect stdout+stderr during instructor call to kill XML retry noise.
+    # Instructor prints <generation number="1"><exception>...</exception> via
+    # sys.stdout directly — the logging module cannot suppress it.
+    import sys, os as _os, contextlib
+    with open(_os.devnull, "w") as _null, \
+         contextlib.redirect_stdout(_null), \
+         contextlib.redirect_stderr(_null):
+        return _instructor_client.chat.completions.create(
+            model=model,
+            messages=messages,
+            response_model=ClientStatus,
+            max_retries=2,
+        )
 
 
 def query_client_ai(client_id: int, question: str, pm_username: str = None) -> dict:
@@ -297,12 +304,11 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
-    # Gemini first — no daily TPD cap on free tier.
-    # Groq 8b second — 500k TPD (5× the 70b limit), fast.
-    # Groq 70b last — quality fallback, use only when others fail.
+    # Gemini first — high free quota, great structured output.
+    # Groq 70b only — 8b-instant removed because it fails function calling
+    # (BadRequestError: "Failed to call a function") with instructor's schema.
     for model, key in [
         ("gemini/gemini-2.5-flash", gemini_key),
-        ("groq/llama-3.1-8b-instant", groq_key),
         ("groq/llama-3.3-70b-versatile", groq_key),
     ]:
         if not key:
@@ -339,12 +345,17 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
             print(f"[ai_engine] ✅ {model} responded successfully (action={status.action})")
             return {"status": status.model_dump(), "model_used": model, "error": False}
         except Exception as e:
-            print(f"[ai_engine] ❌ {model} failed: {type(e).__name__}: {str(e)[:200]}")
+            err_str = str(e)
+            is_rate_limit = "429" in err_str or "rate_limit" in err_str.lower() or "quota" in err_str.lower()
+            print(f"[ai_engine] ❌ {model} failed ({'rate limit' if is_rate_limit else type(e).__name__})")
             continue
 
     return {
         "status": None, "model_used": "none", "error": True,
-        "error_message": "AI unavailable. Check GROQ_API_KEY or GEMINI_API_KEY in .env",
+        "error_message": (
+            "API quota exhausted for today. Both Gemini and Groq free tiers have daily limits. "
+            "The AI will be available again tomorrow, or upgrade to a paid API key tier."
+        ),
     }
 
 
