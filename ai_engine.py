@@ -46,33 +46,30 @@ RULES:
 - IMPORTANT: Your answer must be clearly different depending on the question asked."""
 
 # Intent detection — handled before LLM, no AI call needed
-_ACTION_INTENTS = {
-    "clear_risk": [
-        "mark as healthy", "mark as safe", "clear risk", "remove flag",
-        "unmark risk", "clear the risk", "remove risk flag", "mark not at risk",
-        "not at risk anymore", "resolved risk", "remove the flag", "unflag",
-        "remove as flag", "remove client flag", "remove the client",
-        "no longer at risk", "not at risk", "clear flag", "remove risk",
-    ],
-    "mark_active": [
-        "mark as active", "set status active", "reactivate", "set to active",
-    ],
-    "mark_on_hold": [
-        "mark as on hold", "put on hold", "set to on hold", "pause case",
-    ],
-    "mark_completed": [
-        "mark as completed", "mark complete", "case is done", "set to completed",
-        "close the case",
-    ],
-}
+# Uses keyword-combination logic so any natural phrasing is caught.
 
+_REMOVE_WORDS = {"remove", "clear", "unflag", "unmark", "take off", "delete", "drop", "reset"}
+_FLAG_WORDS   = {"flag", "risk", "flagged", "at-risk", "at risk", "mark", "warning"}
 
 def _detect_intent(question: str) -> str | None:
     q = question.lower().strip()
-    for intent, phrases in _ACTION_INTENTS.items():
-        for phrase in phrases:
-            if phrase in q:
-                return intent
+
+    # clear_risk: any remove/clear word + any flag/risk word, or explicit healthy/safe phrases
+    if (any(w in q for w in _REMOVE_WORDS) and any(w in q for w in _FLAG_WORDS)) \
+       or any(p in q for p in ["mark as healthy", "mark as safe", "not at risk",
+                                "no longer at risk", "resolved risk", "unflag"]):
+        return "clear_risk"
+
+    if any(p in q for p in ["mark as active", "set to active", "reactivate", "set status active"]):
+        return "mark_active"
+
+    if any(p in q for p in ["on hold", "put on hold", "pause case", "set to on hold"]):
+        return "mark_on_hold"
+
+    if any(p in q for p in ["mark as completed", "mark complete", "case is done",
+                             "close the case", "set to completed"]):
+        return "mark_completed"
+
     return None
 
 
