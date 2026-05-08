@@ -8,3 +8,9 @@ chroma_db/
 *.egg-info/
 dist/
 build/
+.env
+venv/
+__pycache__/
+*.db
+chroma_db/
+mem0_db/
