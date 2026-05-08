@@ -305,8 +305,7 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
     # Gemini first — high free quota, great structured output.
-    # Groq 70b only — 8b-instant removed because it fails function calling
-    # (BadRequestError: "Failed to call a function") with instructor's schema.
+    # Groq 70b fallback — free but 100k TPD daily cap.
     for model, key in [
         ("gemini/gemini-2.5-flash", gemini_key),
         ("groq/llama-3.3-70b-versatile", groq_key),
