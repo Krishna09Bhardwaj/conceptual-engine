@@ -1280,23 +1280,45 @@ async function askAI() {
       body: JSON.stringify({ question: q }),
     });
     const data = await res.json();
-    if (data.action) {
-      // Intent handled — show confirmation, sync UI state
-      content.innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;font-size:14px;color:#166534;">${esc(data.message)}</div>`;
+
+    // ── Keyword intent engine response (fast path) ──
+    if (data.action && !data.status) {
+      const isRisk = data.action === 'mark_risk';
+      const bg = isRisk ? '#fff7ed' : '#f0fdf4';
+      const border = isRisk ? '#fed7aa' : '#bbf7d0';
+      const color = isRisk ? '#9a3412' : '#166534';
+      content.innerHTML = `<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:14px 16px;font-size:14px;color:${color};font-weight:500;">${esc(data.message)}</div>`;
       meta.textContent = '';
-      if (data.action === 'mark_risk') {
-        selectClient(currentClientId); // refresh to show AT RISK banner
-      } else if (data.action === 'clear_risk' || data.action === 'status_update') {
-        document.getElementById('risk-banner').style.display = 'none';
-        selectClient(currentClientId);
-      }
-    } else if (data.error || !data.status) {
+      selectClient(currentClientId);
+      return;
+    }
+
+    if (data.error || !data.status) {
       content.innerHTML = '<p style="color:var(--red);">AI could not generate a response. Please try again.</p>';
       meta.textContent = data.model_used ? `Attempted with ${data.model_used}` : '';
+      return;
+    }
+
+    // ── LLM response ──
+    const s = data.status;
+    const llmAction = s.action || 'none';
+
+    if (llmAction !== 'none') {
+      // LLM understood a command and executed it — show clean confirmation
+      const isRiskAction = llmAction === 'mark_risk';
+      const bg = isRiskAction ? '#fff7ed' : '#f0fdf4';
+      const border = isRiskAction ? '#fed7aa' : '#bbf7d0';
+      const color = isRiskAction ? '#9a3412' : '#166534';
+      content.innerHTML = `<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:14px 16px;font-size:14px;color:${color};font-weight:500;">${esc(s.key_context)}</div>`;
+      meta.textContent = `via ${data.model_used}`;
+      selectClient(currentClientId); // refresh banner + status card
     } else {
-      content.innerHTML = _renderClientStatus(data.status, data.model_used);
-      // Auto-sync: if AI says safe, clear risk banner locally
-      if (data.status.risk_level === 'safe') {
+      // Regular question — show full status card
+      content.innerHTML = _renderClientStatus(s, data.model_used);
+      // Sync banner if AI says risk level changed
+      if (s.risk_level === 'at_risk') {
+        document.getElementById('risk-banner').style.display = 'flex';
+      } else if (s.risk_level === 'safe') {
         document.getElementById('risk-banner').style.display = 'none';
       }
       meta.textContent = '';

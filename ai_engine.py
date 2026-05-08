@@ -20,6 +20,7 @@ litellm.suppress_debug_info = True
 
 
 class ClientStatus(BaseModel):
+    action: Literal["none", "mark_risk", "clear_risk", "mark_active", "mark_on_hold", "mark_completed"] = "none"
     current_status: str
     pending_items: list[str]
     completed_items: list[str]
@@ -31,17 +32,48 @@ class ClientStatus(BaseModel):
 
 _instructor_client = instructor.from_litellm(litellm.completion)
 
-SYSTEM_PROMPT = """You are an AI assistant for JineeGreenCard, an immigration consulting company.
+SYSTEM_PROMPT = """You are the AI brain for JineeGreenCard, an immigration consulting company.
 You have the client's full conversation history — WhatsApp, Fathom calls, emails, case notes.
+You understand the PM's intent from CONTEXT, not just keywords. A PM is a human — they speak naturally.
 
-RULES:
-- Always return structured JSON matching the ClientStatus schema exactly.
+── ACTION DETECTION ──
+The PM may be giving you a COMMAND, not asking a question. Detect this from meaning, not exact words.
+Set `action` field if the PM wants you to change something in the system:
+
+  mark_risk    → PM wants to flag this client as AT RISK
+    Examples: "flag this client", "mark as risk", "this case is problematic",
+              "we're in trouble here", "escalate this", "this needs a flag",
+              "mark this client as risk", "put a risk flag", "flag it"
+
+  clear_risk   → PM wants to remove the AT RISK flag
+    Examples: "remove the flag", "unflag", "clear risk", "we're good now",
+              "mark as healthy", "no longer at risk", "resolved"
+
+  mark_active  → PM wants status set to Active
+    Examples: "reactivate", "set to active", "case is back on track"
+
+  mark_on_hold → PM wants to pause the case
+    Examples: "put on hold", "pause", "freeze this case", "hold for now"
+
+  mark_completed → PM wants to close the case
+    Examples: "case is done", "close it", "mark complete", "wrap up"
+
+  none → PM is asking a question or requesting information (not a command)
+
+── WHEN action != "none" ──
+- Set key_context to a SHORT confirmation: "Done. [Client name] has been flagged as AT RISK."
+- Set current_status to reflect the new state.
+- Set risk_level to match the action (mark_risk → at_risk, clear_risk → safe, etc.)
+- pending_items and completed_items can be empty lists.
+- immediate_action_items: 1-2 follow-up actions after the change.
+
+── WHEN action == "none" (answering a question) ──
 - pending_items: list of things NOT yet done. ONLY include if question is about pending work.
 - completed_items: list of things already done. ONLY include if question is about completed work.
 - next_deadline: the most important upcoming deadline as a date string or 'Not set'.
 - risk_level: 'at_risk' if urgent/overdue/RFE/denial, 'watch' if deadline within 30 days or stale, 'safe' otherwise.
 - immediate_action_items: 1-3 concrete next actions the PM should take NOW.
-- key_context: DIRECT answer to the specific question asked. 2-5 sentences. DO NOT give a general status update unless that is what was asked.
+- key_context: DIRECT answer to the specific question asked. 2-5 sentences.
 - current_status: one sentence summary of overall case status.
 - IMPORTANT: Your answer must be clearly different depending on the question asked."""
 
@@ -270,6 +302,23 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
             print(f"[ai_engine] Attempting {model} for client={client_id}")
             status = _call_structured(messages, model)
 
+            # Execute DB action if LLM decided to take one
+            if status.action == "mark_risk":
+                update_client(client_id, risk_flag=True)
+                print(f"[ai_engine] action=mark_risk applied for client={client_id}")
+            elif status.action == "clear_risk":
+                update_client(client_id, risk_flag=False)
+                print(f"[ai_engine] action=clear_risk applied for client={client_id}")
+            elif status.action == "mark_active":
+                update_client(client_id, status="Active", risk_flag=False)
+                print(f"[ai_engine] action=mark_active applied for client={client_id}")
+            elif status.action == "mark_on_hold":
+                update_client(client_id, status="On Hold")
+                print(f"[ai_engine] action=mark_on_hold applied for client={client_id}")
+            elif status.action == "mark_completed":
+                update_client(client_id, status="Completed", risk_flag=False)
+                print(f"[ai_engine] action=mark_completed applied for client={client_id}")
+
             if pm_username:
                 try:
                     from memory_engine import add_pm_memory
@@ -277,7 +326,7 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
                 except Exception:
                     pass
 
-            print(f"[ai_engine] ✅ {model} responded successfully")
+            print(f"[ai_engine] ✅ {model} responded successfully (action={status.action})")
             return {"status": status.model_dump(), "model_used": model, "error": False}
         except Exception as e:
             print(f"[ai_engine] ❌ {model} failed: {type(e).__name__}: {str(e)[:200]}")
