@@ -50,6 +50,7 @@ RULES:
 
 _REMOVE_WORDS = {"remove", "clear", "unflag", "unmark", "take off", "delete", "drop", "reset"}
 _FLAG_WORDS   = {"flag", "risk", "flagged", "at-risk", "at risk", "mark", "warning"}
+_SET_WORDS    = {"flag", "mark", "set", "put", "add", "make", "label", "tag"}
 
 def _detect_intent(question: str) -> str | None:
     q = question.lower().strip()
@@ -59,6 +60,14 @@ def _detect_intent(question: str) -> str | None:
        or any(p in q for p in ["mark as healthy", "mark as safe", "not at risk",
                                 "no longer at risk", "resolved risk", "unflag"]):
         return "clear_risk"
+
+    # mark_risk: any set/flag word + risk mention (and no remove word to avoid conflict with clear_risk)
+    if not any(w in q for w in _REMOVE_WORDS):
+        if (any(w in q for w in _SET_WORDS) and ("risk" in q or "at-risk" in q)) \
+           or any(p in q for p in ["flag this client", "flag the client", "flag client",
+                                   "mark at risk", "mark as at risk", "set as at risk",
+                                   "this is risky", "needs attention", "escalate"]):
+            return "mark_risk"
 
     if any(p in q for p in ["mark as active", "set to active", "reactivate", "set status active"]):
         return "mark_active"
@@ -198,6 +207,14 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
         return {
             "action": "clear_risk",
             "message": f"✅ Risk flag cleared for {client['name']}. The AT RISK banner has been removed.",
+            "model_used": "intent_engine",
+            "error": False,
+        }
+    if intent == "mark_risk":
+        update_client(client_id, risk_flag=True)
+        return {
+            "action": "mark_risk",
+            "message": f"🚨 {client['name']} has been flagged as AT RISK.",
             "model_used": "intent_engine",
             "error": False,
         }

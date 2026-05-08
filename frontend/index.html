@@ -1284,9 +1284,10 @@ async function askAI() {
       // Intent handled — show confirmation, sync UI state
       content.innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;font-size:14px;color:#166534;">${esc(data.message)}</div>`;
       meta.textContent = '';
-      if (data.action === 'clear_risk' || data.action === 'status_update') {
+      if (data.action === 'mark_risk') {
+        selectClient(currentClientId); // refresh to show AT RISK banner
+      } else if (data.action === 'clear_risk' || data.action === 'status_update') {
         document.getElementById('risk-banner').style.display = 'none';
-        // Refresh client data silently to sync status card
         selectClient(currentClientId);
       }
     } else if (data.error || !data.status) {
