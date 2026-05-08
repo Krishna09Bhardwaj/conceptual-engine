@@ -457,6 +457,8 @@ async def feed_data(
         raise HTTPException(500, f"Error processing data: {str(e)[:150]}")
 
 
+_ALLOWED_EXTS = {"pdf", "docx", "doc", "txt", "xlsx", "xls", "csv"}
+
 @app.post("/api/clients/{client_id}/feed/document", status_code=201)
 async def feed_document(
     client_id: int,
@@ -469,32 +471,22 @@ async def feed_document(
         raise HTTPException(401, "Not authenticated")
     client = _check_client_access(client_id, user)
 
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "Only PDF files are accepted")
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in _ALLOWED_EXTS:
+        raise HTTPException(400, f"Unsupported file type. Accepted: PDF, Word (DOCX), Excel (XLSX), CSV, TXT")
 
     file_bytes = await file.read()
-
-    if len(file_bytes) > 10 * 1024 * 1024:
-        raise HTTPException(400, "File too large. Maximum size is 10MB.")
-
-    if not file_bytes.startswith(b"%PDF"):
-        raise HTTPException(400, "File does not appear to be a valid PDF.")
+    if len(file_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(400, "File too large. Maximum size is 20MB.")
 
     try:
-        import pdfplumber, io
-        text_parts = []
-        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-            for page in pdf.pages:
-                t = page.extract_text()
-                if t:
-                    text_parts.append(t)
-        text = "\n".join(text_parts).strip()[:50000]
+        text = extract_text_from_file(file.filename, file_bytes).strip()
         if not text:
             raise ValueError("Empty")
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(400, "Could not read this PDF. Please check the file is not password-protected.")
+    except Exception as e:
+        raise HTTPException(400, f"Could not read file: {str(e)[:120]}")
 
     entry_id = add_data_entry(client_id, "document", text, source_url=file.filename)
     add_to_vector_store(client_id, client["name"], "document", text, entry_id)
@@ -503,6 +495,73 @@ async def feed_document(
         "message": "Document indexed successfully",
         "entry_id": entry_id,
         "filename": file.filename,
+        "risk_triggered": risk,
+    }
+
+
+class GDocRequest(BaseModel):
+    url: str
+
+@app.post("/api/clients/{client_id}/feed/gdoc", status_code=201)
+async def feed_gdoc(
+    client_id: int,
+    body: GDocRequest,
+    authorization: Optional[str] = Header(None),
+):
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    client = _check_client_access(client_id, user)
+
+    url = body.url.strip()
+    import re as _re, csv as _csv, io as _io
+    import httpx as _httpx
+
+    gdoc_m = _re.search(r"docs\.google\.com/document/d/([a-zA-Z0-9_-]+)", url)
+    gsheet_m = _re.search(r"docs\.google\.com/spreadsheets/d/([a-zA-Z0-9_-]+)", url)
+
+    if gdoc_m:
+        export_url = f"https://docs.google.com/document/d/{gdoc_m.group(1)}/export?format=txt"
+        source_label = "Google Doc"
+    elif gsheet_m:
+        export_url = f"https://docs.google.com/spreadsheets/d/{gsheet_m.group(1)}/export?format=csv"
+        source_label = "Google Sheet"
+    else:
+        raise HTTPException(400, "Not a valid Google Docs or Google Sheets URL.")
+
+    try:
+        async with _httpx.AsyncClient(timeout=20, follow_redirects=True) as hclient:
+            resp = await hclient.get(export_url)
+            if resp.status_code == 403:
+                raise HTTPException(
+                    400,
+                    "Document is private. In Google Docs, click Share → 'Anyone with the link' → Viewer, then try again."
+                )
+            resp.raise_for_status()
+            raw = resp.text
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Could not fetch document: {str(e)[:120]}")
+
+    if gsheet_m:
+        reader = _csv.reader(_io.StringIO(raw))
+        rows = [" | ".join(r) for r in reader if any(c.strip() for c in r)]
+        text = "\n".join(rows)[:40000]
+    else:
+        text = raw[:40000]
+
+    if not text.strip():
+        raise HTTPException(400, "Document appears to be empty.")
+
+    entry_id = add_data_entry(client_id, "document", text, source_url=url)
+    add_to_vector_store(client_id, client["name"], "document", text, entry_id)
+    risk = flag_if_keyword(client_id, text)
+    return {
+        "message": f"{source_label} fetched and indexed successfully",
+        "entry_id": entry_id,
+        "source_url": url,
         "risk_triggered": risk,
     }
 

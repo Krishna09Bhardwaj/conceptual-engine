@@ -55,6 +55,23 @@ def extract_text_from_file(filename: str, file_bytes: bytes) -> str:
             for row in table.rows:
                 lines.append(" | ".join(c.text.strip() for c in row.cells if c.text.strip()))
         return "\n".join(lines)[:40000]
+    elif ext in ("xlsx", "xls"):
+        import io, openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+        rows = []
+        for sheet in wb.worksheets:
+            rows.append(f"[Sheet: {sheet.title}]")
+            for row in sheet.iter_rows(values_only=True):
+                cells = [str(c) if c is not None else "" for c in row]
+                if any(c.strip() for c in cells):
+                    rows.append(" | ".join(cells))
+        return "\n".join(rows)[:40000]
+    elif ext == "csv":
+        import csv, io as _io
+        text = file_bytes.decode("utf-8", errors="replace")
+        reader = csv.reader(_io.StringIO(text))
+        rows = [" | ".join(row) for row in reader if any(c.strip() for c in row)]
+        return "\n".join(rows)[:40000]
     elif ext == "txt":
         return file_bytes.decode("utf-8", errors="replace")[:40000]
     else:

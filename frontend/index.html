@@ -585,15 +585,26 @@
           <button class="feed-btn" id="fathom-btn" onclick="fetchFathom()">Fetch Transcript</button>
         </div>
 
-        <!-- Card 4: PDF Document Upload -->
+        <!-- Card 4: Document Upload (PDF, Word, Excel, CSV + Google Docs) -->
         <div class="feed-card">
           <div class="feed-card-title">Upload Document</div>
-          <div class="feed-card-subtitle">Upload case documents, RFE responses, expert opinion letters, or any PDF. The system reads and indexes the full content.</div>
-          <label class="file-label" for="doc-file-input">📄 Choose .pdf file</label>
-          <input type="file" id="doc-file-input" accept=".pdf" onchange="onDocFileSelected()">
+          <div class="feed-card-subtitle">PDF, Word, Excel, CSV — or paste a Google Docs / Sheets link. Everything is read, indexed, and available to the AI instantly.</div>
+
+          <label class="file-label" for="doc-file-input">📄 Choose file (PDF, DOCX, XLSX, CSV, TXT)</label>
+          <input type="file" id="doc-file-input" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt" onchange="onDocFileSelected()">
           <div id="doc-filename" style="font-size:12px;color:var(--green);margin:5px 0 0;min-height:16px;"></div>
           <div id="doc-status" class="feed-inline-msg"></div>
-          <button class="feed-btn" id="doc-upload-btn" onclick="uploadDocument()">Upload PDF</button>
+          <button class="feed-btn" id="doc-upload-btn" onclick="uploadDocument()">Upload Document</button>
+
+          <div style="display:flex;align-items:center;gap:10px;margin:14px 0 4px;">
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+            <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">OR PASTE GOOGLE LINK</span>
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+          </div>
+          <input type="url" id="gdoc-url-input" placeholder="https://docs.google.com/document/d/..."
+            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:#fafafa;box-sizing:border-box;margin-bottom:6px;">
+          <div id="gdoc-status" class="feed-inline-msg"></div>
+          <button class="feed-btn" id="gdoc-fetch-btn" onclick="fetchGDoc()" style="background:var(--accent);">Fetch &amp; Index Google Doc</button>
 
           <!-- Docs tracker -->
           <div class="docs-tracker">
@@ -1561,7 +1572,7 @@ async function uploadDocument() {
   const statusEl = document.getElementById('doc-status');
   statusEl.style.display = 'none';
 
-  if (!input.files[0]) { showToast('Please select a PDF file first', 'error'); return; }
+  if (!input.files[0]) { showToast('Please select a file first', 'error'); return; }
   if (!currentClientId) return;
 
   const form = new FormData();
@@ -1588,7 +1599,44 @@ async function uploadDocument() {
     statusEl.className = 'feed-inline-msg error';
     statusEl.textContent = e.message || 'Could not read this PDF. Please check the file is not password-protected.';
     statusEl.style.display = 'block';
-  } finally { btn.disabled = false; btn.textContent = 'Upload PDF'; }
+  } finally { btn.disabled = false; btn.textContent = 'Upload Document'; }
+}
+
+async function fetchGDoc() {
+  const urlInput = document.getElementById('gdoc-url-input');
+  const btn = document.getElementById('gdoc-fetch-btn');
+  const statusEl = document.getElementById('gdoc-status');
+  statusEl.style.display = 'none';
+
+  const url = urlInput.value.trim();
+  if (!url) { showToast('Paste a Google Docs or Sheets link first', 'error'); return; }
+  if (!currentClientId) return;
+
+  btn.disabled = true; btn.textContent = 'Fetching...';
+  try {
+    const res = await fetch(API + `/api/clients/${currentClientId}/feed/gdoc`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not fetch document');
+    statusEl.className = 'feed-inline-msg success';
+    statusEl.textContent = data.message || 'Indexed successfully';
+    statusEl.style.display = 'block';
+    if (data.risk_triggered) {
+      document.getElementById('risk-banner').style.display = 'flex';
+      showToast('⚠️ Risk keywords found in document — client flagged AT RISK', 'error');
+    } else {
+      showToast('Google Doc indexed — AI can now answer questions about it', 'success');
+    }
+    urlInput.value = '';
+    await refreshTimeline();
+  } catch(e) {
+    statusEl.className = 'feed-inline-msg error';
+    statusEl.textContent = e.message || 'Failed to fetch document';
+    statusEl.style.display = 'block';
+  } finally { btn.disabled = false; btn.textContent = 'Fetch & Index Google Doc'; }
 }
 
 async function saveNote() {
