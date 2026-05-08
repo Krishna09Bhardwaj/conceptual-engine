@@ -29,7 +29,7 @@ import uvicorn
 
 from database import (
     init_db, is_db_empty, get_all_clients, get_clients_for_pm, get_all_pms, get_client, create_client,
-    update_client, add_data_entry, get_data_entries, delete_data_entry,
+    update_client, add_data_entry, get_data_entries, delete_data_entry, get_entry_client_id,
     add_action_item, get_action_items, toggle_action_item, delete_client,
     log_audit,
 )
@@ -600,8 +600,13 @@ async def assign_pm(client_id: int, body: dict, authorization: Optional[str] = H
 @app.delete("/api/entries/{entry_id}", status_code=200)
 async def delete_entry(entry_id: int, authorization: Optional[str] = Header(None)):
     token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
-    if not get_user_from_token(token):
+    user = get_user_from_token(token)
+    if not user:
         raise HTTPException(401, "Not authenticated")
+    client_id = get_entry_client_id(entry_id)
+    if client_id is None:
+        raise HTTPException(404, "Entry not found")
+    _check_client_access(client_id, user)
     delete_data_entry(entry_id)
     return {"message": "Deleted"}
 

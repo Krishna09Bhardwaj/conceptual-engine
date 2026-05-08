@@ -157,6 +157,13 @@ def add_data_entry(client_id, source_type, content, source_url=None, added_by="P
     return entry_id
 
 
+def get_entry_client_id(entry_id: int):
+    conn = get_conn()
+    row = conn.execute("SELECT client_id FROM data_entries WHERE id=?", (entry_id,)).fetchone()
+    conn.close()
+    return row["client_id"] if row else None
+
+
 def delete_data_entry(entry_id: int):
     conn = get_conn()
     conn.execute("DELETE FROM data_entries WHERE id=?", (entry_id,))

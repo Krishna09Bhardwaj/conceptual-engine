@@ -4,15 +4,17 @@
 
 ## Status
 - [x] Environment setup — Python 3.14, venv, all packages installed
-- [x] Backend (FastAPI) built — main.py with all routes
-- [x] Database (SQLite) initialized — client360.db ✅
-- [x] Vector store (ChromaDB) — available as enhancement when model cached
-- [x] AI integration (Groq) — working, Gemini fallback ready
-- [x] Fathom transcript fetcher — parsers.py
-- [x] WhatsApp .txt parser — parsers.py
-- [x] Frontend (demo UI) built — frontend/index.html (single file, full UI)
-- [x] Demo data seeded — 3 clients with rich data
-- [x] Security checks — parameterized SQL, file type validation, input limits
+- [x] Backend (FastAPI) built — main.py with all routes + admin routes
+- [x] Database (SQLite) — client360.db with audit_log, pm_digests, FTS5 full-text search
+- [x] Vector store (LlamaIndex + ChromaDB) — per-client isolated collections
+- [x] AI engine (LiteLLM + Instructor) — structured ClientStatus output, Groq → Gemini fallback
+- [x] Risk engine — two-layer rule-based detection (deadline + activity + keyword)
+- [x] PM memory (Mem0 self-hosted) — per-PM context across sessions
+- [x] Scheduler (APScheduler) — daily risk scan 8AM IST, digest 9AM IST, weekly re-index
+- [x] Parsers — MarkItDown PDF, spaCy date extraction, WhatsApp parser, Fathom fetcher
+- [x] Frontend — structured AI status cards, admin panel, digest banner
+- [x] Security hardened — entry ownership check, parameterized SQL, file type validation
+- [x] Tests — 23 tests passing (vector store, risk engine, AI engine, parsers, DB schema)
 - [x] Server running on port 8000
 
 ## PORT NOTE
@@ -20,27 +22,67 @@ Port 7000 is used by macOS AirPlay/ControlCenter.
 → We use PORT 8000 instead.
 → http://localhost:8000
 
-## What Is Done
-✅ All files written and verified
-✅ venv at ./venv with all packages
-✅ SQLite DB (client360.db) with 3 demo clients
-✅ 3 demo clients seeded:
-   - Arjun Mehta (O-1A, AT RISK) — 3 entries + 5 action items
-   - Priya Sharma (EB-1A, Active) — 2 entries + 2 action items
-   - Rohit Verma (H-1B, Active) — 2 entries + 3 action items
-✅ AI engine: SQLite-based context retrieval (instant) + Groq → Gemini fallback
-✅ Full single-file frontend with 3-panel layout
-✅ Server verified running on http://localhost:8000
+## Architecture (Upgraded)
+
+```
+main.py (FastAPI)
+  ├── auth.py              — JWT-style token auth, role system (admin/pm/staff)
+  ├── database.py          — SQLite, FTS5, audit_log, pm_digests
+  ├── vector_store.py      — LlamaIndex + ChromaDB per-client collections
+  ├── ai_engine.py         — LiteLLM + Instructor → ClientStatus Pydantic model
+  ├── risk_engine.py       — rule-based risk scoring (at_risk / watch / safe)
+  ├── memory_engine.py     — Mem0 PM memory (Groq + ChromaDB + HuggingFace)
+  ├── scheduler.py         — APScheduler: daily scan, morning digest, weekly re-index
+  ├── parsers.py           — WhatsApp, Fathom, PDF (MarkItDown), spaCy dates
+  └── frontend/index.html  — single-file UI with structured AI cards + admin view
+```
+
+## AI Response Format (NEW)
+
+The AI now returns a structured `ClientStatus` object instead of freeform text:
+
+```json
+{
+  "status": {
+    "current_status": "...",
+    "pending_items": ["..."],
+    "completed_items": ["..."],
+    "next_deadline": "2026-06-09",
+    "risk_level": "safe | watch | at_risk",
+    "immediate_action_items": ["..."],
+    "key_context": "..."
+  },
+  "model_used": "groq/llama-3.3-70b-versatile",
+  "error": false
+}
+```
+
+## Admin Routes (NEW)
+
+- `GET /api/admin/clients` — all clients with risk_level field (admin only)
+- `GET /api/admin/audit` — recent audit log (admin only)
+- `GET /api/admin/pm-summary` — per-PM client + activity summary (admin only)
+- `GET /api/clients/{id}/digest` — today's morning digest for the PM of this client
+
+## Demo Accounts
+
+| Username | Password  | Role  |
+|----------|-----------|-------|
+| admin    | admin123  | admin |
+| tulsi    | tulsi123  | pm    |
+| dhruv    | dhruv123  | pm    |
+| lakshita | lakshita123 | pm  |
 
 ## REQUIRED BEFORE DEMO — ADD YOUR API KEY
 
-Edit `.env` and add your Groq key:
+Edit `.env` and add your keys:
 ```
 GROQ_API_KEY=your_key_here
+GEMINI_API_KEY=your_key_here   # fallback if Groq fails
 ```
-→ Get FREE at: https://console.groq.com (takes 60 seconds, no credit card)
+→ Get Groq FREE at: https://console.groq.com (takes 60 seconds, no credit card)
 
-## How To Run The Project
+## How To Run
 
 ```bash
 cd /Users/krishnabhardwaj/developer/conceptual-engine/jinee-client360
@@ -50,14 +92,12 @@ python3 main.py
 
 Then open: **http://localhost:8000**
 
-The server auto-seeds 3 demo clients on first launch.
-
 ## Team Setup (for new members)
 
 **Mac:**
 ```bash
 git clone https://github.com/Team-Jinee/Conceptual-Engine.git
-cd Conceptual-Engine
+cd Conceptual-Engine/jinee-client360
 cp .env.example .env   # then add your API keys
 bash setup.sh
 source venv/bin/activate && python3 main.py
@@ -66,66 +106,45 @@ source venv/bin/activate && python3 main.py
 **Windows:**
 ```
 git clone https://github.com/Team-Jinee/Conceptual-Engine.git
-cd Conceptual-Engine
-copy .env.example .env   # then add your API keys in Notepad
+cd Conceptual-Engine\jinee-client360
+copy .env.example .env
 setup.bat
 venv\Scripts\activate && python main.py
 ```
 
-## Startup Checks Added
-- Server exits with clear message if `.env` is missing or `GROQ_API_KEY` is empty
-- Server exits with clear message if `venv` folder doesn't exist
+## Demo Flow (10 minutes)
 
-## Demo Instructions For Seniors
+**1. Login as admin / admin123**
+- Notice the 🛡 Admin View button in the sidebar
+- Click it → see all clients with risk levels, filter by risk/PM
+- Click PM Summary → per-PM stats
 
-### Setup (5 min before meeting)
-1. Open Terminal
-2. Run: `cd /Users/krishnabhardwaj/developer/conceptual-engine/jinee-client360 && source venv/bin/activate && python3 main.py`
-3. See startup report print ✅ items
-4. Open Chrome at http://localhost:8000
-
-### Demo Flow (8-10 minutes)
-
-**1. Show the sidebar (30 sec)**
-- Left panel = client list
-- Red dot on Arjun Mehta = At Risk
-- Green dots on Priya and Rohit = Active
-
-**2. Click Arjun Mehta (2 min)**
-- Show dashboard: O-1A case, ~45 day deadline in RED, "At Risk" status
-- Point to the RED RISK BANNER at top
-- Show 4 stat cards: case type, deadline, status, assigned PM (Tulsi Rani)
+**2. Select Arjun Mehta (At Risk client)**
+- Red dot, deadline in RED
+- See risk banner at top
 
 **3. AI Demo — the money shot (3 min)**
-- Click "Full Status" quick button
-- AI responds in ~3-5 seconds with a structured answer
-- It knows: Dr. Williams letter overdue, I-94 expiry, filing deadline
+- Click "Full Status" → structured card renders: risk badge, pending/completed items, immediate actions, key context
 - Click "What's at Risk" → specific risk analysis
-- Type custom: "What happened with Dr. Williams?" → AI knows exactly from the WhatsApp conversations
+- Click "Action Items" → prioritized list with deadline context
 
-**4. Data Feed Demo (1 min)**
-- Show "WhatsApp" tab: "PMs export chats from their phone, upload here"
-- Show "Fathom Link" tab: "Paste meeting recording URL, auto-fetches transcript"
-- Show "Note/Email" tab: "Paste any text directly"
+**4. Data Feed (1 min)**
+- WhatsApp .txt upload, Fathom link auto-fetch, note/email paste, PDF upload
 
-**5. Action Items (30 sec)**
-- Right panel: 5 action items for Arjun
-- Check one off — it crosses out
-- Type a new one, press Enter — adds instantly
+**5. Admin Panel Demo**
+- Filter by "at_risk" → see flagged clients
+- Click a client row → jumps directly to their dashboard
 
-**6. Add a New Client (1 min)**
-- Click "+ Add Client"
-- Fill in name, case type, PM
-- Client appears in sidebar immediately
-
-### Key Points to Say
-- "This replaces digging through WhatsApp at 11pm"
-- "The AI has read every conversation, email, and call note for this client"
-- "Phase 2: WhatsApp auto-sync via Baileys, Fathom webhook, email integration"
+## Key Points to Say
+- "AI returns structured data, not freeform text — it always gives risk level, pending items, action items"
+- "The AI has read every conversation, call transcript, document, and email for this client"
+- "Risk engine runs automatically every morning — PMs get a digest at 9AM IST"
+- "Memory engine: the AI remembers what each PM asked about before — context persists across sessions"
 - "All data is local — only the query goes to the AI API"
-- "Takes 10 seconds to onboard a new client"
 
-### If Asked About Vector Search
-"The semantic search layer (ChromaDB) is ready — it uses SQLite-based retrieval
-for the demo which works great. With one model download, it upgrades to full
-semantic vector search automatically."
+## Scheduler Jobs
+| Job | Schedule | What it does |
+|-----|----------|-------------|
+| Daily Risk Scan | 8AM IST | Flags new at-risk clients |
+| Morning Digest | 9AM IST | Generates per-PM priority list |
+| Weekly Re-index | Sunday midnight IST | Rebuilds ChromaDB from SQLite |

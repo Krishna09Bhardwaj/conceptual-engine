@@ -109,10 +109,30 @@
   .ai-input-row button:hover { background: var(--accent); }
   .ai-input-row button:disabled { background: var(--gray); cursor: not-allowed; }
   #ai-answer-box { margin-top: 14px; display: none; }
-  #ai-answer-content { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.7; color: var(--text); white-space: pre-wrap; }
+  #ai-answer-content { font-size: 14px; line-height: 1.7; color: var(--text); }
   #ai-answer-meta { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
   .thinking-dots::after { content: ''; animation: dots 1.2s steps(4, end) infinite; }
   @keyframes dots { 0%, 20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%, 100% { content: '...'; } }
+  .ai-status-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .ai-status-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .ai-risk-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .risk-safe { background: #dcfce7; color: #166534; }
+  .risk-watch { background: #fef9c3; color: #854d0e; }
+  .risk-at_risk { background: #fee2e2; color: #991b1b; }
+  .ai-section-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 0 4px; }
+  .ai-item-list { list-style: none; padding: 0; margin: 0; }
+  .ai-item-list li { font-size: 13px; padding: 3px 0; color: var(--text); }
+  .ai-item-list li::before { content: "• "; color: var(--accent); }
+  .ai-key-context { font-size: 13px; line-height: 1.6; color: var(--text); background: #fff; border-left: 3px solid var(--accent); padding: 8px 12px; border-radius: 0 6px 6px 0; margin-top: 8px; }
+  .ai-action-item { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 6px 10px; margin: 4px 0; font-size: 13px; color: #1e40af; }
+  #digest-banner { display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 14px; font-size:12px; color:#1e40af; margin-bottom:12px; white-space:pre-line; }
+  #admin-panel { display:none; padding:16px; background:#fff; border-radius:10px; border:1px solid var(--border); margin:12px; }
+  .admin-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .admin-table th { padding:8px 10px; text-align:left; background:#f8fafc; font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase; }
+  .admin-table td { padding:8px 10px; border-top:1px solid var(--border); }
+  .admin-table tr:hover td { background:#f9fafb; cursor:pointer; }
+  #admin-btn { display:none; margin:0 12px 6px; padding:9px; background:rgba(99,102,241,0.15); border:1px dashed rgba(99,102,241,0.4); border-radius:7px; color:rgba(165,180,252,0.9); font-size:12px; cursor:pointer; text-align:center; transition:all 0.15s; }
+  #admin-btn:hover { background:rgba(99,102,241,0.25); color:#c7d2fe; }
 
   /* Feed data tabs */
   .tab-bar { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -409,6 +429,7 @@
   </div>
   <div id="import-client-btn" onclick="openImportModal()">📂 Upload Client List</div>
   <div id="add-client-btn" onclick="openAddClientModal()">+ Add Client</div>
+  <div id="admin-btn" onclick="toggleAdminPanel()">🛡 Admin View</div>
   <div id="user-bar">
     <div id="user-bar-info">
       <div id="user-bar-name">—</div>
@@ -502,6 +523,9 @@
         <div class="stat-card" id="pm-stat-card"><div class="stat-card-label">Assigned PM</div><div class="stat-card-value" id="dash-pm" style="font-size:14px;">—</div><div class="pm-assign-hint" id="pm-assign-hint" style="display:none;">Click to assign</div><div class="pm-inline-dropdown" id="pm-inline-dropdown"></div></div>
       </div>
       <div id="dash-last-updated" style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:right;display:none;"></div>
+
+      <!-- Digest Banner -->
+      <div id="digest-banner"></div>
 
       <!-- Ask AI -->
       <div class="section-card">
@@ -619,6 +643,39 @@
       </div>
 
     </div><!-- /client-dashboard -->
+
+    <!-- Admin Panel -->
+    <div id="admin-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div style="font-size:15px;font-weight:700;color:var(--navy);">Admin Overview</div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="adminLoadClients()" style="padding:6px 14px;background:var(--navy);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">Refresh</button>
+          <button onclick="adminTogglePMSummary()" style="padding:6px 14px;background:var(--gray-light);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);">PM Summary</button>
+        </div>
+      </div>
+      <div id="admin-filter-row" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <select id="admin-filter-risk" onchange="renderAdminTable()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;cursor:pointer;">
+          <option value="">All Risk Levels</option>
+          <option value="at_risk">At Risk</option>
+          <option value="watch">Watch</option>
+          <option value="safe">Safe</option>
+        </select>
+        <select id="admin-filter-pm" onchange="renderAdminTable()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;cursor:pointer;">
+          <option value="">All PMs</option>
+        </select>
+      </div>
+      <div id="admin-clients-section">
+        <table class="admin-table">
+          <thead><tr><th>Client</th><th>Case</th><th>PM</th><th>Deadline</th><th>Risk</th></tr></thead>
+          <tbody id="admin-clients-body"><tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">Click Refresh to load clients</td></tr></tbody>
+        </table>
+      </div>
+      <div id="admin-pm-section" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
+        <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px;">PM Activity Summary</div>
+        <div id="admin-pm-body"></div>
+      </div>
+    </div>
+
   </div><!-- /main-content -->
 </div><!-- /main -->
 
@@ -825,6 +882,9 @@ async function doLogout() {
   document.getElementById('right-panel').style.display = 'flex';
   document.getElementById('add-client-btn').style.display = 'block';
   document.getElementById('import-client-btn').style.display = 'block';
+  document.getElementById('admin-btn').style.display = 'none';
+  document.getElementById('admin-panel').style.display = 'none';
+  document.getElementById('digest-banner').style.display = 'none';
   document.getElementById('sidebar-search').style.display = 'block';
   document.getElementById('clients-heading').style.display = 'block';
   document.getElementById('client-list').style.display = 'block';
@@ -858,6 +918,7 @@ function showApp() {
 
   if (role === 'admin') {
     document.getElementById('user-bar-role').textContent = 'Admin — all clients';
+    document.getElementById('admin-btn').style.display = 'block';
   } else if (role === 'pm') {
     document.getElementById('user-bar-role').textContent = position || 'Program Manager';
   } else {
@@ -1046,7 +1107,10 @@ function renderDashboard(client, entries, actions) {
   // Reset AI
   document.getElementById('ai-question-input').value = '';
   document.getElementById('ai-answer-box').style.display = 'none';
-  document.getElementById('ai-answer-content').textContent = '';
+  document.getElementById('ai-answer-content').innerHTML = '';
+
+  // Load PM digest
+  _loadDigest(client.id);
 
   // Timeline + Docs tracker
   renderTimeline(entries);
@@ -1189,15 +1253,54 @@ async function askAI() {
       body: JSON.stringify({ question: q }),
     });
     const data = await res.json();
-    content.textContent = data.answer || 'No response received.';
-    meta.textContent = data.model_used ? `Answered by ${data.model_used}` : '';
+    if (data.error || !data.status) {
+      content.innerHTML = '<p style="color:var(--red);">AI could not generate a structured response. Please try again.</p>';
+      meta.textContent = data.model_used ? `Attempted with ${data.model_used}` : '';
+    } else {
+      content.innerHTML = _renderClientStatus(data.status, data.model_used);
+      meta.textContent = '';
+    }
   } catch(e) {
-    content.textContent = 'Error connecting to AI. Is the server running?';
+    content.innerHTML = '<p style="color:var(--red);">Error connecting to AI. Is the server running?</p>';
     meta.textContent = '';
   } finally {
     btn.disabled = false;
     btn.textContent = 'Ask AI';
   }
+}
+
+function _renderClientStatus(s, modelUsed) {
+  const riskClass = 'risk-' + (s.risk_level || 'safe');
+  const riskLabel = { safe: 'Safe', watch: 'Watch', at_risk: 'At Risk' }[s.risk_level] || s.risk_level;
+
+  function listItems(arr) {
+    if (!arr || !arr.length) return '<li style="color:var(--text-muted)">None noted</li>';
+    return arr.map(i => `<li>${esc(i)}</li>`).join('');
+  }
+
+  const actionItems = s.immediate_action_items && s.immediate_action_items.length
+    ? s.immediate_action_items.map(i => `<div class="ai-action-item">⚡ ${esc(i)}</div>`).join('')
+    : '<div style="font-size:13px;color:var(--text-muted);">No immediate actions flagged.</div>';
+
+  const model = modelUsed ? `<span style="font-size:11px;color:var(--text-muted);margin-left:8px;">via ${esc(modelUsed)}</span>` : '';
+
+  return `
+    <div class="ai-status-card">
+      <div class="ai-status-header">
+        <span style="font-size:14px;font-weight:700;color:var(--navy);">Client Status Analysis${model}</span>
+        <span class="ai-risk-badge ${riskClass}">${riskLabel}</span>
+      </div>
+      <div class="ai-section-label">Current Status</div>
+      <div style="font-size:13px;color:var(--text);line-height:1.5;">${esc(s.current_status || '—')}</div>
+      ${s.next_deadline ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Next deadline: ${esc(s.next_deadline)}</div>` : ''}
+      <div class="ai-section-label">Pending Items</div>
+      <ul class="ai-item-list">${listItems(s.pending_items)}</ul>
+      <div class="ai-section-label">Completed Items</div>
+      <ul class="ai-item-list">${listItems(s.completed_items)}</ul>
+      <div class="ai-section-label">Immediate Actions</div>
+      ${actionItems}
+      ${s.key_context ? `<div class="ai-section-label">Key Context</div><div class="ai-key-context">${esc(s.key_context)}</div>` : ''}
+    </div>`;
 }
 
 // ─── Document Tracker ────────────────────────────────
@@ -1879,6 +1982,122 @@ async function submitImport() {
     setImportProgress(0);
     btn.disabled = false;
     btn.textContent = 'Import Clients';
+  }
+}
+
+// ─── Digest ──────────────────────────────────────────
+async function _loadDigest(clientId) {
+  const banner = document.getElementById('digest-banner');
+  if (!currentUser || currentUser.role === 'admin') { banner.style.display = 'none'; return; }
+  try {
+    const res = await fetch(API + `/api/clients/${clientId}/digest`, { headers: authHeaders() });
+    if (!res.ok) { banner.style.display = 'none'; return; }
+    const data = await res.json();
+    if (data.digest) {
+      banner.textContent = data.digest;
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+  } catch(e) {
+    banner.style.display = 'none';
+  }
+}
+
+// ─── Admin Panel ─────────────────────────────────────
+let _adminClients = [];
+let _adminPMSummaryOpen = false;
+
+function toggleAdminPanel() {
+  const panel = document.getElementById('admin-panel');
+  const open = panel.style.display === 'block';
+  panel.style.display = open ? 'none' : 'block';
+  if (!open) adminLoadClients();
+}
+
+async function adminLoadClients() {
+  const tbody = document.getElementById('admin-clients-body');
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">Loading...</td></tr>';
+  try {
+    const res = await fetch(API + '/api/admin/clients', { headers: authHeaders() });
+    if (!res.ok) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--red);padding:12px;">Access denied or error loading.</td></tr>'; return; }
+    const raw = await res.json();
+    _adminClients = Array.isArray(raw) ? raw : (raw.clients || []);
+    _populatePMFilter();
+    renderAdminTable();
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--red);padding:12px;">Could not load clients.</td></tr>';
+  }
+}
+
+function _populatePMFilter() {
+  const sel = document.getElementById('admin-filter-pm');
+  const pms = [...new Set(_adminClients.map(c => c.assigned_pm || 'Unassigned'))].sort();
+  sel.innerHTML = '<option value="">All PMs</option>' + pms.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+}
+
+function renderAdminTable() {
+  const riskFilter = document.getElementById('admin-filter-risk').value;
+  const pmFilter = document.getElementById('admin-filter-pm').value;
+  const riskLabel = { safe: 'Safe', watch: 'Watch', at_risk: 'At Risk' };
+  const riskColor = { safe: 'var(--green)', watch: 'var(--yellow)', at_risk: 'var(--red)' };
+
+  let rows = _adminClients;
+  if (riskFilter) rows = rows.filter(c => (c.risk_level || 'safe') === riskFilter);
+  if (pmFilter) rows = rows.filter(c => (c.assigned_pm || 'Unassigned') === pmFilter);
+
+  const tbody = document.getElementById('admin-clients-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">No clients match the filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(c => {
+    const rl = c.risk_level || 'safe';
+    const days = c.deadline ? Math.ceil((new Date(c.deadline) - new Date()) / 86400000) : null;
+    const dlText = c.deadline ? `${c.deadline}${days !== null ? ` (${days}d)` : ''}` : '—';
+    const dlColor = days !== null && days <= 14 ? 'var(--red)' : days !== null && days <= 30 ? 'var(--yellow)' : '';
+    return `<tr onclick="selectClient(${c.id});document.getElementById('admin-panel').style.display='none';" style="cursor:pointer;">
+      <td style="font-weight:500;">${esc(c.name)}</td>
+      <td>${esc(c.case_type)}</td>
+      <td>${esc(c.assigned_pm || 'Unassigned')}</td>
+      <td style="color:${dlColor};">${esc(dlText)}</td>
+      <td><span style="font-weight:600;color:${riskColor[rl]};">${riskLabel[rl] || rl}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+async function adminTogglePMSummary() {
+  const section = document.getElementById('admin-pm-section');
+  _adminPMSummaryOpen = !_adminPMSummaryOpen;
+  section.style.display = _adminPMSummaryOpen ? 'block' : 'none';
+  if (!_adminPMSummaryOpen) return;
+  const body = document.getElementById('admin-pm-body');
+  body.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Loading...</div>';
+  try {
+    const res = await fetch(API + '/api/admin/pm-summary', { headers: authHeaders() });
+    if (!res.ok) { body.innerHTML = '<div style="color:var(--red);">Could not load PM summary.</div>'; return; }
+    const raw = await res.json();
+    const data = Array.isArray(raw) ? raw : (raw.summary || []);
+    if (!data.length) { body.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No PM activity data yet.</div>'; return; }
+    body.innerHTML = data.map(pm => {
+      const name = pm.pm_name || pm.assigned_pm || '—';
+      const total = pm.total_clients != null ? pm.total_clients : (pm.clients_updated != null ? pm.clients_updated : '—');
+      const atRisk = pm.at_risk != null ? pm.at_risk : (pm.at_risk_count != null ? pm.at_risk_count : '—');
+      const queries = pm.total_queries != null ? pm.total_queries : '—';
+      const lastActive = pm.last_active || pm.last_login;
+      return `
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:6px;">${esc(name)}</div>
+        <div style="font-size:12px;color:var(--text-muted);">
+          Clients: <strong>${total}</strong> &nbsp;·&nbsp;
+          At Risk: <strong style="color:var(--red);">${atRisk}</strong>
+          ${queries !== '—' ? `&nbsp;·&nbsp; Queries: <strong>${queries}</strong>` : ''}
+          &nbsp;·&nbsp; Last active: <strong>${lastActive ? formatDate(lastActive) : 'Never'}</strong>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    body.innerHTML = '<div style="color:var(--red);">Error loading PM summary.</div>';
   }
 }
 
