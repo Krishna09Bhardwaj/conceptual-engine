@@ -601,9 +601,12 @@
 
           <!-- Fathom Summary Card (shown after fetch) -->
           <div id="fathom-summary-card" style="display:none;margin-top:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:16px;">
-            <div style="font-size:13px;font-weight:700;color:#111;margin-bottom:12px;">📋 Call Summary <span id="fathom-summary-date" style="font-weight:400;color:var(--text-muted);font-size:12px;"></span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div style="font-size:13px;font-weight:700;color:#111;">📋 Call Summary <span id="fathom-summary-date" style="font-weight:400;color:var(--text-muted);font-size:12px;"></span></div>
+              <button onclick="toggleFathomSummaryCard()" id="fathom-minimize-btn" title="Minimize" style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;color:var(--text-muted);">− Minimize</button>
+            </div>
             <div id="fathom-summary-body"></div>
-            <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+            <div id="fathom-summary-actions" style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
               <button onclick="copyFathomSummary()" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:#f9fafb;cursor:pointer;">Copy Summary</button>
               <button onclick="saveFathomSummaryNote()" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:#f9fafb;cursor:pointer;">Save to Notes</button>
             </div>
@@ -1763,6 +1766,16 @@ async function loadPastFathomSummaries() {
         </div>
       </div>`).join('');
   } catch(e) {}
+}
+
+function toggleFathomSummaryCard() {
+  const body = document.getElementById('fathom-summary-body');
+  const actions = document.getElementById('fathom-summary-actions');
+  const btn = document.getElementById('fathom-minimize-btn');
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? 'block' : 'none';
+  actions.style.display = collapsed ? 'flex' : 'none';
+  btn.textContent = collapsed ? '− Minimize' : '+ Expand';
 }
 
 function togglePastFathom() {
