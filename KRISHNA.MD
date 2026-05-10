@@ -1,5 +1,11 @@
 # Krishna's Session Notes — Client 360 Engine
 
+## Fixes Applied — May 2026
+- **Problem 2 FIXED**: Daily at-risk reminder banner with per-client dismissal (`reminder_dismissals` table, `GET /api/reminders/today`, `POST /api/reminders/dismiss/{id}`)
+- **Problem 3 FIXED**: Fathom auto-summary on fetch using Instructor + `FathomSummary` schema (6 fields: client_issue, action_items, deadlines, key_decisions, risk_flags, one_line_summary)
+- **Google Doc link pasting**: already fixed before this session
+- All 3 May 4 meeting problems now resolved
+
 ## Project: JineeGreenCard Client 360 Intelligence System
 
 ## Status

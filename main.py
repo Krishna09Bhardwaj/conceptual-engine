@@ -31,10 +31,10 @@ from database import (
     init_db, is_db_empty, get_all_clients, get_clients_for_pm, get_all_pms, get_client, create_client,
     update_client, add_data_entry, get_data_entries, delete_data_entry, get_entry_client_id,
     add_action_item, get_action_items, toggle_action_item, delete_client,
-    log_audit,
+    log_audit, get_todays_at_risk_reminders, dismiss_reminder,
 )
 from vector_store import init_vector_store, add_to_vector_store, delete_client_vectors
-from ai_engine import query_client_ai, generate_summary, parse_clients_from_text
+from ai_engine import query_client_ai, generate_summary, parse_clients_from_text, generate_fathom_summary
 from parsers import parse_whatsapp_txt, fetch_fathom_transcript, extract_text_from_file
 from auth import login as auth_login, get_user_from_token, logout as auth_logout
 from risk_engine import flag_if_keyword
@@ -430,11 +430,32 @@ async def feed_data(
             if not url or not url.strip().startswith("https://fathom.video/"):
                 raise HTTPException(400, "URL must start with https://fathom.video/")
             transcript = await fetch_fathom_transcript(url.strip())
+            if transcript.startswith("ERROR"):
+                raise HTTPException(400, "Could not fetch transcript. Link may be private or expired.")
             entry_id = add_data_entry(client_id, "fathom", transcript, source_url=url.strip())
             add_to_vector_store(client_id, client["name"], "fathom", transcript, entry_id)
             risk = flag_if_keyword(client_id, transcript)
             log_audit(user["id"], "feed_fathom", "client", client_id, url.strip()[:100])
-            return {"message": "Fathom transcript fetched", "entry_id": entry_id, "preview": transcript[:200], "risk_triggered": risk}
+            # Generate AI summary — non-blocking: if it fails, still return transcript
+            import json as _json
+            summary_obj = None
+            summary_entry_id = None
+            try:
+                summary_obj = generate_fathom_summary(transcript, client["name"])
+                if summary_obj:
+                    summary_json = _json.dumps(summary_obj.model_dump())
+                    summary_entry_id = add_data_entry(client_id, "fathom_summary", summary_json, source_url=url.strip())
+                    add_to_vector_store(client_id, client["name"], "fathom_summary", summary_obj.one_line_summary, summary_entry_id)
+            except Exception:
+                pass
+            return {
+                "message": "Fathom transcript fetched",
+                "entry_id": entry_id,
+                "preview": transcript[:200],
+                "risk_triggered": risk,
+                "summary": summary_obj.model_dump() if summary_obj else None,
+                "summary_entry_id": summary_entry_id,
+            }
 
         elif source_type in ("email", "note", "meeting", "wa_call", "internal"):
             if not content or not content.strip():
@@ -747,6 +768,85 @@ def run_startup():
 
     print("\n🚀 Server starting at http://localhost:8000")
     print("=" * 55 + "\n")
+
+
+# ─── Reminder Routes ──────────────────────────────────────────────────────────
+
+@app.get("/api/reminders/today")
+async def get_todays_reminders(authorization: Optional[str] = Header(None)):
+    from datetime import date as _date
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    today = _date.today().isoformat()
+    clients = get_todays_at_risk_reminders(user["id"], user["name"], today)
+    result = []
+    for c in clients:
+        # Build reason string
+        reasons = []
+        if c.get("deadline"):
+            try:
+                from datetime import date as _d
+                days = (_d.fromisoformat(c["deadline"]) - _d.today()).days
+                if days < 0:
+                    reasons.append(f"Deadline overdue by {abs(days)}d")
+                elif days <= 30:
+                    reasons.append(f"Deadline in {days}d")
+            except Exception:
+                pass
+        if c.get("last_updated"):
+            try:
+                from datetime import datetime as _dt, timezone
+                lu = _dt.fromisoformat(c["last_updated"])
+                stale_days = (_dt.utcnow() - lu).days
+                if stale_days >= 7:
+                    reasons.append(f"No update in {stale_days}d")
+            except Exception:
+                pass
+        if not reasons:
+            reasons.append("Flagged at risk")
+        result.append({
+            "client_id": c["id"],
+            "client_name": c["name"],
+            "case_type": c["case_type"],
+            "deadline": c.get("deadline"),
+            "reason": " · ".join(reasons),
+        })
+    return result
+
+
+@app.post("/api/reminders/dismiss/{client_id}")
+async def dismiss_client_reminder(client_id: int, authorization: Optional[str] = Header(None)):
+    from datetime import date as _date
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    dismiss_reminder(user["id"], client_id, _date.today().isoformat())
+    return {"success": True}
+
+
+# ─── Fathom Summaries Route ───────────────────────────────────────────────────
+
+@app.get("/api/clients/{client_id}/fathom-summaries")
+async def get_fathom_summaries(client_id: int, authorization: Optional[str] = Header(None)):
+    import json as _json
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = get_user_from_token(token)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    _check_client_access(client_id, user)
+    entries = get_data_entries(client_id)
+    summaries = []
+    for e in entries:
+        if e.get("source_type") == "fathom_summary":
+            try:
+                summary_data = _json.loads(e["content"])
+            except Exception:
+                summary_data = {"one_line_summary": e["content"]}
+            summaries.append({"id": e["id"], "created_at": e["created_at"], "summary": summary_data})
+    return summaries
 
 
 # ─── Admin Routes ─────────────────────────────────────────────────────────────

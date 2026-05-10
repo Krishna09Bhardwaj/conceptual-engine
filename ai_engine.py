@@ -358,6 +358,51 @@ def query_client_ai(client_id: int, question: str, pm_username: str = None) -> d
     }
 
 
+class FathomSummary(BaseModel):
+    client_issue: str
+    action_items: list[str]
+    deadlines: list[str]
+    key_decisions: list[str]
+    risk_flags: list[str]
+    one_line_summary: str
+
+
+_FATHOM_SYSTEM_PROMPT = """You are an expert immigration case manager summarizing a client call transcript for JineeGreenCard.
+Extract actionable intelligence only. Be specific. No filler words.
+Focus on: what the client needs, what the team promised, what deadlines were mentioned, what is at risk.
+Return structured JSON matching the schema exactly."""
+
+
+def generate_fathom_summary(transcript_text: str, client_name: str) -> FathomSummary | None:
+    import sys, os as _os, contextlib
+    messages = [
+        {"role": "system", "content": _FATHOM_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Client: {client_name}\n\nTranscript:\n{transcript_text[:12000]}"},
+    ]
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    for model, key in [
+        ("gemini/gemini-2.5-flash", gemini_key),
+        ("groq/llama-3.3-70b-versatile", groq_key),
+    ]:
+        if not key:
+            continue
+        try:
+            with open(_os.devnull, "w") as _null, \
+                 contextlib.redirect_stdout(_null), \
+                 contextlib.redirect_stderr(_null):
+                result = _instructor_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    response_model=FathomSummary,
+                    max_retries=2,
+                )
+            return result
+        except Exception:
+            continue
+    return None
+
+
 def generate_summary(client_id: int, pm_username: str = None) -> dict:
     return query_client_ai(
         client_id,

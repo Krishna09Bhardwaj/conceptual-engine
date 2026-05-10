@@ -78,6 +78,13 @@ def init_db():
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts
             USING fts5(content, source_type, client_id UNINDEXED, entry_id UNINDEXED);
+        CREATE TABLE IF NOT EXISTS reminder_dismissals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            client_id INTEGER NOT NULL,
+            dismissed_date TEXT NOT NULL,
+            UNIQUE(user_id, client_id, dismissed_date)
+        );
     """)
     conn.commit()
     # Migrate existing DBs that don't have the position column yet
@@ -86,6 +93,33 @@ def init_db():
         conn.commit()
     except Exception:
         pass
+    conn.close()
+
+
+def get_todays_at_risk_reminders(user_id: int, pm_name: str, today: str) -> list:
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT c.id, c.name, c.case_type, c.deadline, c.last_updated
+        FROM clients c
+        WHERE c.risk_flag = 1
+          AND c.assigned_pm = ?
+          AND c.id NOT IN (
+              SELECT client_id FROM reminder_dismissals
+              WHERE user_id = ? AND dismissed_date = ?
+          )
+        ORDER BY c.deadline ASC
+    """, (pm_name, user_id, today)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def dismiss_reminder(user_id: int, client_id: int, today: str):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO reminder_dismissals (user_id, client_id, dismissed_date) VALUES (?,?,?)",
+        (user_id, client_id, today),
+    )
+    conn.commit()
     conn.close()
 
 
