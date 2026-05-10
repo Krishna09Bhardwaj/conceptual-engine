@@ -1132,7 +1132,7 @@ function renderDashboard(client, entries, actions) {
   const dlEl = document.getElementById('dash-deadline');
   if (client.deadline) {
     const days = Math.ceil((new Date(client.deadline) - new Date()) / 86400000);
-    dlEl.textContent = client.deadline + (days <= 30 ? ` (${days}d)` : '');
+    dlEl.textContent = formatDate(client.deadline) + (days <= 30 ? ` (${days}d)` : '');
     dlEl.className = 'stat-card-value' + (days <= 30 ? ' deadline-close' : '');
   } else {
     dlEl.textContent = 'Not set';
@@ -1693,7 +1693,7 @@ async function fetchFathom() {
 
 function _renderFathomSummary(s) {
   const card = document.getElementById('fathom-summary-card');
-  document.getElementById('fathom-summary-date').textContent = '— ' + new Date().toLocaleDateString();
+  document.getElementById('fathom-summary-date').textContent = '— ' + formatDate(new Date().toISOString());
   const row = (icon, label, items) => {
     if (!items || (Array.isArray(items) && !items.length)) return '';
     const content = Array.isArray(items)
@@ -1978,8 +1978,13 @@ function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; 
 
 function formatDate(iso) {
   if (!iso) return '';
-  try { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
-  catch { return iso.substring(0, 10); }
+  try {
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  } catch { return iso.substring(0, 10); }
 }
 
 let toastTimer;
@@ -2022,7 +2027,7 @@ function _renderDeadlineCard(deadlineStr) {
   const dlEl = document.getElementById('dash-deadline');
   if (!deadlineStr) { dlEl.textContent = 'Not set'; dlEl.className = 'stat-card-value'; return; }
   const days = Math.ceil((new Date(deadlineStr) - new Date()) / 86400000);
-  dlEl.textContent = `${deadlineStr} (${days >= 0 ? '' : ''}${days}d)`;
+  dlEl.textContent = `${formatDate(deadlineStr)} (${days}d)`;
   dlEl.className = 'stat-card-value' + (days <= 30 ? ' deadline-close' : '');
 }
 
@@ -2376,7 +2381,7 @@ function renderAdminTable() {
   tbody.innerHTML = rows.map(c => {
     const rl = c.risk_level || 'safe';
     const days = c.deadline ? Math.ceil((new Date(c.deadline) - new Date()) / 86400000) : null;
-    const dlText = c.deadline ? `${c.deadline}${days !== null ? ` (${days}d)` : ''}` : '—';
+    const dlText = c.deadline ? `${formatDate(c.deadline)}${days !== null ? ` (${days}d)` : ''}` : '—';
     const dlColor = days !== null && days <= 14 ? 'var(--red)' : days !== null && days <= 30 ? 'var(--yellow)' : '';
     return `<tr onclick="selectClient(${c.id});document.getElementById('admin-panel').style.display='none';" style="cursor:pointer;">
       <td style="font-weight:500;">${esc(c.name)}</td>
