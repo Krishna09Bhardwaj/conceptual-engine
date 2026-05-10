@@ -33,7 +33,7 @@ from database import (
     add_action_item, get_action_items, toggle_action_item, delete_client,
     log_audit, get_todays_at_risk_reminders, dismiss_reminder,
 )
-from vector_store import init_vector_store, add_to_vector_store, delete_client_vectors
+from vector_store import init_vector_store, add_to_vector_store, delete_client_vectors, delete_entry_vector
 from ai_engine import query_client_ai, generate_summary, parse_clients_from_text, generate_fathom_summary
 from parsers import parse_whatsapp_txt, fetch_fathom_transcript, extract_text_from_file
 from auth import login as auth_login, get_user_from_token, logout as auth_logout
@@ -708,6 +708,7 @@ async def delete_entry(entry_id: int, authorization: Optional[str] = Header(None
         raise HTTPException(404, "Entry not found")
     _check_client_access(client_id, user)
     delete_data_entry(entry_id)
+    delete_entry_vector(client_id, entry_id)
     return {"message": "Deleted"}
 
 
@@ -838,6 +839,12 @@ async def get_fathom_summaries(client_id: int, authorization: Optional[str] = He
         raise HTTPException(401, "Not authenticated")
     _check_client_access(client_id, user)
     entries = get_data_entries(client_id)
+    # Build lookup: source_url → fathom transcript entry_id
+    transcript_by_url = {
+        e["source_url"]: e["id"]
+        for e in entries
+        if e.get("source_type") == "fathom" and e.get("source_url")
+    }
     summaries = []
     for e in entries:
         if e.get("source_type") == "fathom_summary":
@@ -845,7 +852,12 @@ async def get_fathom_summaries(client_id: int, authorization: Optional[str] = He
                 summary_data = _json.loads(e["content"])
             except Exception:
                 summary_data = {"one_line_summary": e["content"]}
-            summaries.append({"id": e["id"], "created_at": e["created_at"], "summary": summary_data})
+            summaries.append({
+                "id": e["id"],
+                "transcript_entry_id": transcript_by_url.get(e.get("source_url")),
+                "created_at": e["created_at"],
+                "summary": summary_data,
+            })
     return summaries
 
 

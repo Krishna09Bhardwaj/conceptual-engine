@@ -83,6 +83,15 @@ def query_client(client_id: int, question: str, n_results: int = 5) -> list[str]
         return []
 
 
+def delete_entry_vector(client_id: int, entry_id: int):
+    """Remove a single document from the client's ChromaDB collection by entry_id."""
+    try:
+        collection = _get_chroma().get_or_create_collection(f"client_{client_id}")
+        collection.delete(ids=[f"entry_{entry_id}"])
+    except Exception:
+        pass
+
+
 def delete_client_vectors(client_id: int):
     global _chroma_client
     try:

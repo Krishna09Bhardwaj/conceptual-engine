@@ -603,7 +603,10 @@
           <div id="fathom-summary-card" style="display:none;margin-top:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:16px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
               <div style="font-size:13px;font-weight:700;color:#111;">📋 Call Summary <span id="fathom-summary-date" style="font-weight:400;color:var(--text-muted);font-size:12px;"></span></div>
-              <button onclick="toggleFathomSummaryCard()" id="fathom-minimize-btn" title="Minimize" style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;color:var(--text-muted);">− Minimize</button>
+              <div style="display:flex;gap:6px;">
+                <button onclick="deleteFathomSummary()" title="Delete transcript + summary" style="background:none;border:1px solid #fca5a5;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;color:#dc2626;">Delete</button>
+                <button onclick="toggleFathomSummaryCard()" id="fathom-minimize-btn" title="Minimize" style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;color:var(--text-muted);">− Minimize</button>
+              </div>
             </div>
             <div id="fathom-summary-body"></div>
             <div id="fathom-summary-actions" style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
@@ -1115,7 +1118,7 @@ async function selectClient(id) {
     // Reset fathom summary card for new client, then load past summaries
     document.getElementById('fathom-summary-card').style.display = 'none';
     document.getElementById('past-fathom-wrap').style.display = 'none';
-    _currentSummaryData = null;
+    _currentSummaryData = null; _currentSummaryEntryId = null; _currentTranscriptEntryId = null;
     loadPastFathomSummaries();
   } catch(e) {
     showToast('Could not load client', 'error');
@@ -1618,6 +1621,8 @@ async function saveWaPaste() {
 // ── Reminder Banner ───────────────────────────────────────────────────────────
 let _reminderCollapsed = false;
 let _currentSummaryData = null;
+let _currentSummaryEntryId = null;
+let _currentTranscriptEntryId = null;
 
 async function loadReminders() {
   try {
@@ -1710,6 +1715,8 @@ async function fetchFathom() {
       statusEl.className = 'feed-inline-msg success';
       statusEl.textContent = 'Transcript fetched — AI summary generated ✓';
       _currentSummaryData = data.summary;
+      _currentSummaryEntryId = data.summary_entry_id || null;
+      _currentTranscriptEntryId = data.entry_id || null;
       _renderFathomSummary(data.summary);
       loadPastFathomSummaries();
     } else {
@@ -1787,12 +1794,15 @@ async function loadPastFathomSummaries() {
     wrap.style.display = 'block';
     list.innerHTML = summaries.map((s, i) => `
       <div style="border-top:1px solid var(--border);padding:8px 0;">
-        <div onclick="togglePastFathomItem(${i})" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-          <div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div onclick="togglePastFathomItem(${i})" style="cursor:pointer;flex:1;">
             <span style="font-size:12px;color:var(--text-muted);">${formatDate(s.created_at)}</span>
             <span style="display:block;font-size:13px;color:#374151;margin-top:2px;">${esc(s.summary.one_line_summary || '')}</span>
           </div>
-          <span style="font-size:11px;color:var(--text-muted);">▼</span>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <span onclick="togglePastFathomItem(${i})" style="cursor:pointer;font-size:11px;color:var(--text-muted);padding:2px 4px;">▼</span>
+            <button onclick="deletePastFathomEntry(${s.id}, ${s.transcript_entry_id || 'null'})" style="font-size:11px;padding:2px 7px;border:1px solid #fca5a5;border-radius:5px;background:none;color:#dc2626;cursor:pointer;">Delete</button>
+          </div>
         </div>
         <div id="past-fathom-item-${i}" style="display:none;margin-top:8px;padding:10px;background:#f9fafb;border-radius:8px;font-size:13px;">
           ${s.summary.action_items?.length ? '<strong>Actions:</strong><ul style="margin:4px 0 0 16px;">' + s.summary.action_items.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : ''}
@@ -1800,6 +1810,32 @@ async function loadPastFathomSummaries() {
         </div>
       </div>`).join('');
   } catch(e) {}
+}
+
+async function _deleteEntries(ids) {
+  await Promise.all(
+    ids.filter(Boolean).map(id =>
+      fetch(API + `/api/entries/${id}`, { method: 'DELETE', headers: authHeaders() })
+    )
+  );
+}
+
+async function deleteFathomSummary() {
+  if (!confirm('Delete this transcript and its AI summary? This cannot be undone.')) return;
+  await _deleteEntries([_currentSummaryEntryId, _currentTranscriptEntryId]);
+  document.getElementById('fathom-summary-card').style.display = 'none';
+  _currentSummaryData = null; _currentSummaryEntryId = null; _currentTranscriptEntryId = null;
+  await refreshTimeline();
+  loadPastFathomSummaries();
+  showToast('Transcript and summary deleted', 'success');
+}
+
+async function deletePastFathomEntry(summaryId, transcriptId) {
+  if (!confirm('Delete this transcript and its AI summary? This cannot be undone.')) return;
+  await _deleteEntries([summaryId, transcriptId]);
+  await refreshTimeline();
+  loadPastFathomSummaries();
+  showToast('Transcript and summary deleted', 'success');
 }
 
 function toggleFathomSummaryCard() {
