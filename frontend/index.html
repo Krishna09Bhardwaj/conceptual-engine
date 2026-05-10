@@ -554,7 +554,7 @@
           <button class="quick-btn" onclick="quickAsk('Summarize all the conversations and calls we have had with this client.')">Conversation Summary</button>
         </div>
         <div class="ai-input-row">
-          <input type="text" id="ai-question-input" placeholder="Ask anything about this client..." onkeydown="if(event.key==='Enter') askAI()">
+          <input type="text" id="ai-question-input" placeholder="Ask anything about this client..." onkeydown="if(event.key==='Enter' && !this.disabled) askAI(); if(event.key==='Escape') _stopAI();">
           <button id="ask-btn" onclick="askAI()">Ask AI</button>
         </div>
         <div id="ai-answer-box">
@@ -1312,8 +1312,25 @@ function quickAsk(question) {
   askAI();
 }
 
+let _aiAbortController = null;
+
+function _stopAI() {
+  if (_aiAbortController) {
+    _aiAbortController.abort();
+    _aiAbortController = null;
+  }
+}
+
+// Escape key — interrupt running AI query
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _aiAbortController) {
+    _stopAI();
+  }
+});
+
 async function askAI() {
-  const q = document.getElementById('ai-question-input').value.trim();
+  const input = document.getElementById('ai-question-input');
+  const q = input.value.trim();
   if (!q || !currentClientId) return;
 
   const btn = document.getElementById('ask-btn');
@@ -1321,17 +1338,25 @@ async function askAI() {
   const content = document.getElementById('ai-answer-content');
   const meta = document.getElementById('ai-answer-meta');
 
-  btn.disabled = true;
-  btn.textContent = 'Thinking...';
+  _aiAbortController = new AbortController();
+
+  // Switch button to "Stop" — clicking aborts
+  btn.disabled = false;
+  btn.textContent = 'Stop ■';
+  btn.style.background = '#6b7280';
+  btn.onclick = () => { _stopAI(); };
+
+  input.disabled = true;
   box.style.display = 'block';
   content.innerHTML = '<span class="thinking-dots">Thinking</span>';
-  meta.textContent = '';
+  meta.textContent = 'Press Esc to stop';
 
   try {
     const res = await fetch(API + `/api/clients/${currentClientId}/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ question: q }),
+      signal: _aiAbortController.signal,
     });
     const data = await res.json();
 
@@ -1379,11 +1404,20 @@ async function askAI() {
       meta.textContent = '';
     }
   } catch(e) {
-    content.innerHTML = '<p style="color:var(--red);">Error connecting to AI. Is the server running?</p>';
-    meta.textContent = '';
+    if (e.name === 'AbortError') {
+      content.innerHTML = '<p style="color:#6b7280;font-style:italic;">Stopped. Edit your question and try again.</p>';
+      meta.textContent = '';
+    } else {
+      content.innerHTML = '<p style="color:var(--red);">Error connecting to AI. Is the server running?</p>';
+      meta.textContent = '';
+    }
   } finally {
-    btn.disabled = false;
+    _aiAbortController = null;
+    input.disabled = false;
+    input.focus();
     btn.textContent = 'Ask AI';
+    btn.style.background = '';
+    btn.onclick = askAI;
   }
 }
 
